@@ -15,7 +15,7 @@ public:
     bool start();
 
     task<void> coro_call_test_cmds(std::string_view msgs);
-    task<void> coro_call_test();
+    task<bool> coro_call_test();
 
 private:
     // void accept();

@@ -13,10 +13,6 @@
 #endif // WIN32
 
 
-#include "logger.hpp"
-
-#include "reids_client.h"
-
 
 bool watchdog::start() {
     ASSERT_RETURN(base_ != nullptr, false, "event base is nullptr.");
@@ -71,30 +67,29 @@ void watchdog::event_cb(struct bufferevent* bev, short what, void* ctx) {
     bufferevent_free(bev);
 }
 
-task<bool> watchdog::coro_call_test_cmds(std::string_view msgs) {
+task<void> watchdog::coro_call_test_cmds(std::string_view msgs) {
     std::stringstream ss(std::string(msgs.data(), msgs.size()));
     std::string msg;
     while (std::getline(ss, msg, ';')) {
-        auto reply = co_await redis_client::get().coro_command<bool, redisReply*>(msg);
+        auto reply = co_await coro_redis::get().coro_command(msg);
         if (!reply.has_value()) continue;
         auto r = reply.value();
         if (r) {
             LOG_INFO("echo return, type: {},  integer return: {}, content: {}", r->type, r->integer, std::string(r->str, r->len));
         }
     }
-    co_return true;
 }
 
-task<int> watchdog::coro_call_test() {
-    auto r = co_await redis_client::get().coro_echo<int>("test");
-    auto var1 =co_await redis_client::get().coro_incr<int>("var1");
-    auto var2 = co_await redis_client::get().coro_incr<int>("var2");
+task<bool> watchdog::coro_call_test() {
+    auto r = co_await coro_redis::get().coro_echo("test");
+    auto var1 =co_await coro_redis::get().coro_incr("var1");
+    auto var2 = co_await coro_redis::get().coro_incr("var2");
     auto var3 = std::to_string(var1.value() + var2.value());
-    co_await redis_client::get().coro_set<int>("var3", var3);
-    auto var3_2 = co_await redis_client::get().coro_get<int>("var3");
+    co_await coro_redis::get().coro_set("var3", var3);
+    auto var3_2 = co_await coro_redis::get().coro_get("var3");
     LOG_DEBUG("r: {}, var1: {}, var2: {}, var3: {}, var3_2: {}",
         r.value(), var1.value(), var2.value(), var3, var3_2.value());
-    co_return 1;
+    co_return true;
 }
 
 

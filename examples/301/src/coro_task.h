@@ -4,7 +4,7 @@
 #include <optional>
 #include <coroutine>
 
-#include "logger.h"
+#include <logger.hpp>
 
 #ifdef WIN32
 namespace coro = std;

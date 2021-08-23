@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <hiredis/adapters/libevent.h>
 
-#include "coro_task.h"
+#include <coro_redis_client.hpp>
 
 struct bufferevent;
 
@@ -14,8 +14,8 @@ public:
 
     bool start();
 
-    task<bool> coro_call_test_cmds(std::string_view msgs);
-    task<int> coro_call_test();
+    task<void> coro_call_test_cmds(std::string_view msgs);
+    task<bool> coro_call_test();
 
 private:
     // void accept();

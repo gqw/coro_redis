@@ -2,3 +2,5 @@
 /build*
 /.vscode
 !/third/asio
+/.vs
+/out

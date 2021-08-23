@@ -1,18 +1,18 @@
+//
+// Copyright (c) 2020 Gu.Qiwei(gqwmail@qq.com)
+//
+// Distributed under the MIT Software License
+// See accompanying file LICENSE.txt or copy at
+// https://opensource.org/licenses/MIT
+//
 #pragma once
 
 #include <any>
 #include <optional>
 #include <coroutine>
+#include <coro_redis/config.hpp>
 
-#include <logger.hpp>
-
-#ifdef WIN32
-namespace coro = std;
-#else
-namespace coro = std;
-#endif // WIN32
-
-
+namespace coro_redis {
 
 template<typename TASK_RET> class task_promise;
 
@@ -151,3 +151,5 @@ private:
 
     std::any coro_tmp_return_{};
 };
+
+} // namespace coro_redis

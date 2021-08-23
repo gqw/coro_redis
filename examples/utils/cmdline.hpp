@@ -41,6 +41,11 @@
 #endif // !WIN32
 #include <cstdlib>
 
+#ifndef NOMINMAX
+#	undef min
+#	undef max
+#endif
+
 namespace cmdline{
 
 namespace detail{
