@@ -42,6 +42,16 @@ namespace coro_redis {
 					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
 				return ret->integer;
 			}
+			else if constexpr (std::is_same_v<CORO_RET, double>) {
+				ASSERT_RETURN(ret->type == REDIS_REPLY_DOUBLE, std::nullopt,
+					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
+				return stod(std::string(ret->str, ret->len));
+			}
+			else if constexpr (std::is_same_v<CORO_RET, bool>) {
+				ASSERT_RETURN(ret->type == REDIS_REPLY_BOOL, std::nullopt,
+					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
+				return stol(std::string(ret->str, ret->len));
+			}
 			else if constexpr (std::is_void_v<CORO_RET>) {
 				return std::nullopt;
 			}

@@ -408,7 +408,7 @@ public:
 		std::string_view pattern, 
 		uint64_t count = 0);
 
-/*
+
 
 	/// @brief Update the last access time of the given key.
 	/// @param key Key.
@@ -416,27 +416,11 @@ public:
 	/// @retval 1 If key exists, and last access time has been updated.
 	/// @retval 0 If key does not exist.
 	/// @see https://redis.io/commands/touch
-	uint64_t touch(std::string_view key);
-
-	/// @brief Update the last access time of the given key.
-	/// @param first Iterator to the first key to be touched.
-	/// @param last Off-the-end iterator to the given range.
-	/// @return Whether last access time of the key has been updated.
-	/// @retval 1 If key exists, and last access time has been updated.
-	/// @retval 0 If key does not exist.
-	/// @see https://redis.io/commands/touch
-	template <typename Input>
-	uint64_t touch(Input first, Input last);
-
-	/// @brief Update the last access time of the given key.
-	/// @param il Initializer list of keys to be touched.
-	/// @return Whether last access time of the key has been updated.
-	/// @retval 1 If key exists, and last access time has been updated.
-	/// @retval 0 If key does not exist.
-	/// @see https://redis.io/commands/touch
-	template <typename T>
-	uint64_t touch(std::initializer_list<T> il) {
-		return touch(il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> touch(Args&&... keys) {
+		std::string cmd("touch");
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Get the remaining Time-To-Live of a key.
@@ -448,13 +432,17 @@ public:
 	/// @note In Redis 2.6 or older, `ttl` returns -1 if the key does not exist,
 	///       or if the key exists but does not have a timeout.
 	/// @see https://redis.io/commands/ttl
-	uint64_t ttl(std::string_view key);
+	inline awaiter_t<uint64_t> ttl(std::string_view key) {
+		return command<uint64_t>(fmt::format("ttl {}", key));
+	}
 
 	/// @brief Get the type of the value stored at key.
 	/// @param key Key.
 	/// @return The type of the value.
 	/// @see https://redis.io/commands/type
-	std::string type(std::string_view key);
+	inline awaiter_t<std::string>  type(std::string_view key) {
+		return command<std::string>(fmt::format("type {}", key));
+	}
 
 	/// @brief Remove the given key asynchronously, i.e. without blocking Redis.
 	/// @param key Key.
@@ -462,23 +450,11 @@ public:
 	/// @retval 1 If key exists, and has been removed.
 	/// @retval 0 If key does not exist.
 	/// @see https://redis.io/commands/unlink
-	uint64_t unlink(std::string_view key);
-
-	/// @brief Remove the given keys asynchronously, i.e. without blocking Redis.
-	/// @param first Iterator to the first key in the given range.
-	/// @param last Off-the-end iterator to the given range.
-	/// @return Number of keys that have been removed.
-	/// @see https://redis.io/commands/unlink
-	template <typename Input>
-	uint64_t unlink(Input first, Input last);
-
-	/// @brief Remove the given keys asynchronously, i.e. without blocking Redis.
-	/// @param il Initializer list of keys to be unlinked.
-	/// @return Number of keys that have been removed.
-	/// @see https://redis.io/commands/unlink
-	template <typename T>
-	uint64_t unlink(std::initializer_list<T> il) {
-		return unlink(il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> unlink(Args&&... keys) {
+		std::string cmd("unlink");
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Wait until previous write commands are successfully replicated to at
@@ -488,17 +464,10 @@ public:
 	/// @return Number of replicas that have been successfully replicated these write commands.
 	/// @note The return value might be less than `numslaves`, because timeout has been reached.
 	/// @see https://redis.io/commands/wait
-	uint64_t wait(uint64_t numslaves, uint64_t timeout);
+	inline awaiter_t<uint64_t> wait(uint64_t numslaves, uint64_t timeout) {
+		return command<uint64_t>(fmt::format("wait {} {}", numslaves, timeout));
+	}
 
-	/// @brief Wait until previous write commands are successfully replicated to at
-	///        least the specified number of replicas or the given timeout has been reached.
-	/// @param numslaves Number of replicas.
-	/// @param timeout Timeout in milliseconds. If timeout is 0ms, wait forever.
-	/// @return Number of replicas that have been successfully replicated these write commands.
-	/// @note The return value might be less than `numslaves`, because timeout has been reached.
-	/// @see https://redis.io/commands/wait
-	/// TODO: Support default parameter for `timeout` to wait forever.
-	uint64_t wait(uint64_t numslaves, const std::chrono::milliseconds& timeout);
 
 	// STRING commands.
 
@@ -507,7 +476,9 @@ public:
 	/// @param str String to be appended.
 	/// @return The length of the string after the append operation.
 	/// @see https://redis.io/commands/append
-	uint64_t append(std::string_view key, std::string_view str);
+	inline awaiter_t<uint64_t> append(std::string_view key, std::string_view str) {
+		return command<uint64_t>(fmt::format("append {} {}", key, str));
+	}
 
 	/// @brief Get the number of bits that have been set for the given range of the string.
 	/// @param key Key.
@@ -516,8 +487,13 @@ public:
 	/// @return Number of bits that have been set.
 	/// @note The index can be negative to index from the end of the string.
 	/// @see https://redis.io/commands/bitcount
-	uint64_t bitcount(std::string_view key, uint64_t start = 0, uint64_t end = -1);
+	inline awaiter_t<uint64_t> bitcount(std::string_view key, uint64_t start = 0, uint64_t end = -1) {
+		return command<uint64_t>(fmt::format("bitcount {} {} {}", key, start, end));
+	}
 
+	enum BitOp {
+		AND, OR, XOR, NOT
+	};
 	/// @brief Do bit operation on the string stored at `key`, and save the result to `destination`.
 	/// @param op Bit operations.
 	/// @param destination The destination key where the result is saved.
@@ -525,32 +501,19 @@ public:
 	/// @return The length of the string saved at `destination`.
 	/// @see https://redis.io/commands/bitop
 	/// @see `BitOp`
-	uint64_t bitop(BitOp op, std::string_view destination, std::string_view key);
-
-	/// @brief Do bit operations on the strings stored at the given keys,
-	///        and save the result to `destination`.
-	/// @param op Bit operations.
-	/// @param destination The destination key where the result is saved.
-	/// @param first Iterator to the first key where the string to be operated is stored.
-	/// @param last Off-the-end iterator to the given range of keys.
-	/// @return The length of the string saved at `destination`.
-	/// @see https://redis.io/commands/bitop
-	/// @see `BitOp`
-	template <typename Input>
-	uint64_t bitop(BitOp op, std::string_view destination, Input first, Input last);
-
-	/// @brief Do bit operations on the strings stored at the given keys,
-	///        and save the result to `destination`.
-	/// @param op Bit operations.
-	/// @param destination The destination key where the result is saved.
-	/// @param il Initializer list of keys where the strings are operated.
-	/// @return The length of the string saved at `destination`.
-	/// @see https://redis.io/commands/bitop
-	/// @see `BitOp`
-	template <typename T>
-	uint64_t bitop(BitOp op, std::string_view destination, std::initializer_list<T> il) {
-		return bitop(op, destination, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> bitop(BitOp op, Args&&... keys) {
+		std::string cmd("bitop");
+		switch (op)	{
+		case BitOp::AND: cmd.append(" AND "); break;
+		case BitOp::OR: cmd.append(" OR "); break;
+		case BitOp::XOR: cmd.append(" XOR "); break;
+		case BitOp::NOT: cmd.append(" NOT "); break;
+		}
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
+
 
 	/// @brief Get the position of the first bit set to 0 or 1 in the given range of the string.
 	/// @param key Key.
@@ -559,24 +522,30 @@ public:
 	/// @param end End index (inclusive) of the range. -1 means the end of the string.
 	/// @return The position of the first bit set to 0 or 1.
 	/// @see https://redis.io/commands/bitpos
-	uint64_t bitpos(std::string_view key,
+	inline awaiter_t<uint64_t> bitpos(std::string_view key,
 		uint64_t bit,
 		uint64_t start = 0,
-		uint64_t end = -1);
+		uint64_t end = -1) {
+		return command<uint64_t>(fmt::format("bitpos {} {} {} {}", key, bit, start, end));
+	}
 
 	/// @brief Decrement the integer stored at key by 1.
 	/// @param key Key.
 	/// @return The value after the decrement.
 	/// @see https://redis.io/commands/decr
-	uint64_t decr(std::string_view key);
+	inline awaiter_t<uint64_t> decr(std::string_view key) {
+		return command<uint64_t>(fmt::format("decr {}", key));
+	}
 
 	/// @brief Decrement the integer stored at key by `decrement`.
 	/// @param key Key.
 	/// @param decrement Decrement.
 	/// @return The value after the decrement.
 	/// @see https://redis.io/commands/decrby
-	uint64_t decrby(std::string_view key, uint64_t decrement);
-*/
+	inline awaiter_t<uint64_t> decrby(std::string_view key, uint64_t decrement) {
+		return command<uint64_t>(fmt::format("decrby {} {}", key, decrement));
+	}
+
 
 	/// @brief Get the string value stored at key.
 	///
@@ -596,13 +565,14 @@ public:
 		return command<std::string>(fmt::format("get {}", key));
 	}
 
-/*
 	/// @brief Get the bit value at offset in the string.
 	/// @param key Key.
 	/// @param offset Offset.
 	/// @return The bit value.
 	/// @see https://redis.io/commands/getbit
-	uint64_t getbit(std::string_view key, uint64_t offset);
+	inline awaiter_t<uint64_t> getbit(std::string_view key, uint64_t offset) {
+		return command<uint64_t>(fmt::format("getbit {} {}", key, offset));
+	}
 
 	/// @brief Get the substring of the string stored at key.
 	/// @param key Key.
@@ -610,7 +580,9 @@ public:
 	/// @param end End index (inclusive) of the range. -1 means the end of the string.
 	/// @return The substring in range [start, end]. If key does not exist, return an empty string.
 	/// @see https://redis.io/commands/getrange
-	std::string getrange(std::string_view key, uint64_t start, uint64_t end);
+	inline awaiter_t<std::string> getrange(std::string_view key, uint64_t start, uint64_t end) {
+		return command<std::string>(fmt::format("getrange {} {} {}", key, start, end));
+	}
 
 	/// @brief Atomically set the string stored at `key` to `val`, and return the old value.
 	/// @param key Key.
@@ -619,28 +591,36 @@ public:
 	/// @note If key does not exist, `getset` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/getset
 	/// @see `OptionalString`
-	OptionalString getset(std::string_view key, std::string_view val);
+	inline awaiter_t<std::string> getset(std::string_view key, std::string_view val) {
+		return command<std::string>(fmt::format("getset {} {}", key, val));
+	}
 
 	/// @brief Increment the integer stored at key by 1.
 	/// @param key Key.
 	/// @return The value after the increment.
 	/// @see https://redis.io/commands/incr
-	uint64_t incr(std::string_view key);
+	inline awaiter_t<uint64_t> incr(std::string_view key) {
+		return command<uint64_t>(fmt::format("incr {}", key));
+	}
 
 	/// @brief Increment the integer stored at key by `increment`.
 	/// @param key Key.
 	/// @param increment Increment.
 	/// @return The value after the increment.
 	/// @see https://redis.io/commands/incrby
-	uint64_t incrby(std::string_view key, uint64_t increment);
+	inline awaiter_t<uint64_t> incrby(std::string_view key, uint64_t increment) {
+		return command<uint64_t>(fmt::format("incrby {} {}", key, increment));
+	}
 
 	/// @brief Increment the floating point number stored at key by `increment`.
 	/// @param key Key.
 	/// @param increment Increment.
 	/// @return The value after the increment.
 	/// @see https://redis.io/commands/incrbyfloat
-	double incrbyfloat(std::string_view key, double increment);
-
+	inline awaiter_t<std::string> incrbyfloat(std::string_view key, double increment) {
+		return command<std::string>(fmt::format("incrby {} {}", key, increment));
+	}
+/*
 	/// @brief Get the values of multiple keys atomically.
 	///
 	/// Example:
@@ -662,7 +642,6 @@ public:
 	///       since the given key might not exist (in this case, the value of the corresponding
 	///       key is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/mget
-	template <typename Input, typename Output>
 	inline awaiter_t<std::string> mget(Input first, Input last, Output output);
 
 	/// @brief Get the values of multiple keys atomically.
@@ -872,14 +851,14 @@ public:
 	/// @param val Value.
 	/// @return The length of the string after this operation.
 	/// @see https://redis.io/commands/setrange
-	uint64_t setrange(std::string_view key, uint64_t offset, std::string_view val);
+	inline awaiter_t<uint64_t> setrange(std::string_view key, uint64_t offset, std::string_view val);
 
 	/// @brief Get the length of the string stored at key.
 	/// @param key Key.
 	/// @return The length of the string.
 	/// @note If key does not exist, `strlen` returns 0.
 	/// @see https://redis.io/commands/strlen
-	uint64_t strlen(std::string_view key);
+	inline awaiter_t<uint64_t> strlen(std::string_view key);
 
 	// LIST commands.
 
@@ -1069,7 +1048,7 @@ public:
 	/// @note If the pivot value is not found, `linsert` returns -1.
 	/// @see `InsertPosition`
 	/// @see https://redis.io/commands/linsert
-	uint64_t linsert(std::string_view key,
+	inline awaiter_t<uint64_t> linsert(std::string_view key,
 		InsertPosition position,
 		std::string_view pivot,
 		std::string_view val);
@@ -1078,7 +1057,7 @@ public:
 	/// @param key Key where the list is stored.
 	/// @return The length of the list.
 	/// @see https://redis.io/commands/llen
-	uint64_t llen(std::string_view key);
+	inline awaiter_t<uint64_t> llen(std::string_view key);
 
 	/// @brief Pop the first element of the list.
 	///
@@ -1101,7 +1080,7 @@ public:
 	/// @param val Element to be pushed.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpush
-	uint64_t lpush(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> lpush(std::string_view key, std::string_view val);
 
 	/// @brief Push multiple elements to the beginning of the list.
 	///
@@ -1116,7 +1095,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpush
 	template <typename Input>
-	uint64_t lpush(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> lpush(std::string_view key, Input first, Input last);
 
 	/// @brief Push multiple elements to the beginning of the list.
 	///
@@ -1129,7 +1108,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpush
 	template <typename T>
-	uint64_t lpush(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> lpush(std::string_view key, std::initializer_list<T> il) {
 		return lpush(key, il.begin(), il.end());
 	}
 
@@ -1139,7 +1118,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpushx
 	// TODO: add a multiple elements overload.
-	uint64_t lpushx(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> lpushx(std::string_view key, std::string_view val);
 
 	/// @brief Get elements in the given range of the given list.
 	///
@@ -1164,7 +1143,7 @@ public:
 	/// @return Number of elements removed.
 	/// @note `count` can be positive, negative and 0. Check the reference for detail.
 	/// @see https://redis.io/commands/lrem
-	uint64_t lrem(std::string_view key, uint64_t count, std::string_view val);
+	inline awaiter_t<uint64_t> lrem(std::string_view key, uint64_t count, std::string_view val);
 
 	/// @brief Set the element at the given index to the specified value.
 	/// @param key Key where the list is stored.
@@ -1200,7 +1179,7 @@ public:
 	/// @param val Element to be pushed.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpush
-	uint64_t rpush(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> rpush(std::string_view key, std::string_view val);
 
 	/// @brief Push multiple elements to the end of the list.
 	/// @param key Key where the list is stored.
@@ -1209,7 +1188,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpush
 	template <typename Input>
-	uint64_t rpush(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> rpush(std::string_view key, Input first, Input last);
 
 	/// @brief Push multiple elements to the end of the list.
 	/// @param key Key where the list is stored.
@@ -1217,7 +1196,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpush
 	template <typename T>
-	uint64_t rpush(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> rpush(std::string_view key, std::initializer_list<T> il) {
 		return rpush(key, il.begin(), il.end());
 	}
 
@@ -1226,7 +1205,7 @@ public:
 	/// @param val Element to be pushed.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpushx
-	uint64_t rpushx(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> rpushx(std::string_view key, std::string_view val);
 
 	// HASH commands.
 
@@ -1237,7 +1216,7 @@ public:
 	/// @retval 1 If the field exists, and has been removed.
 	/// @retval 0 If the field does not exist.
 	/// @see https://redis.io/commands/hdel
-	uint64_t hdel(std::string_view key, std::string_view field);
+	inline awaiter_t<uint64_t> hdel(std::string_view key, std::string_view field);
 
 	/// @brief Remove multiple fields from hash.
 	/// @param key Key where the hash is stored.
@@ -1246,7 +1225,7 @@ public:
 	/// @return Number of fields that has been removed.
 	/// @see https://redis.io/commands/hdel
 	template <typename Input>
-	uint64_t hdel(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> hdel(std::string_view key, Input first, Input last);
 
 	/// @brief Remove multiple fields from hash.
 	/// @param key Key where the hash is stored.
@@ -1254,7 +1233,7 @@ public:
 	/// @return Number of fields that has been removed.
 	/// @see https://redis.io/commands/hdel
 	template <typename T>
-	uint64_t hdel(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> hdel(std::string_view key, std::initializer_list<T> il) {
 		return hdel(key, il.begin(), il.end());
 	}
 
@@ -1297,7 +1276,7 @@ public:
 	/// @param increment Increment.
 	/// @return The value of the field after the increment.
 	/// @see https://redis.io/commands/hincrby
-	uint64_t hincrby(std::string_view key, std::string_view field, uint64_t increment);
+	inline awaiter_t<uint64_t> hincrby(std::string_view key, std::string_view field, uint64_t increment);
 
 	/// @brief Increment the floating point number stored at the given field.
 	/// @param key Key where the hash is stored.
@@ -1320,7 +1299,7 @@ public:
 	/// @param key Key where the hash is stored.
 	/// @return Number of fields.
 	/// @see https://redis.io/commands/hlen
-	uint64_t hlen(std::string_view key);
+	inline awaiter_t<uint64_t> hlen(std::string_view key);
 
 	/// @brief Get values of multiple fields.
 	///
@@ -1421,7 +1400,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/hscan
 	template <typename Output>
-	uint64_t hscan(std::string_view key,
+	inline awaiter_t<uint64_t> hscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count,
@@ -1435,7 +1414,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/hscan
 	template <typename Output>
-	uint64_t hscan(std::string_view key,
+	inline awaiter_t<uint64_t> hscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		Output output);
@@ -1448,7 +1427,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/hscan
 	template <typename Output>
-	uint64_t hscan(std::string_view key,
+	inline awaiter_t<uint64_t> hscan(std::string_view key,
 		uint64_t cursor,
 		uint64_t count,
 		Output output);
@@ -1460,7 +1439,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/hscan
 	template <typename Output>
-	uint64_t hscan(std::string_view key,
+	inline awaiter_t<uint64_t> hscan(std::string_view key,
 		uint64_t cursor,
 		Output output);
 
@@ -1518,7 +1497,7 @@ public:
 	/// @return Number of fields that have been added, i.e. fields that not existed before.
 	/// @see https://redis.io/commands/hset
 	template <typename T>
-	uint64_t hset(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> hset(std::string_view key, std::initializer_list<T> il) {
 		return hset(key, il.begin(), il.end());
 	}
 
@@ -1546,7 +1525,7 @@ public:
 	/// @param field Field.
 	/// @return Length of the string.
 	/// @see https://redis.io/commands/hstrlen
-	uint64_t hstrlen(std::string_view key, std::string_view field);
+	inline awaiter_t<uint64_t> hstrlen(std::string_view key, std::string_view field);
 
 	/// @brief Get values of all fields stored at the given hash.
 	/// @param key Key where the hash is stored.
@@ -1566,7 +1545,7 @@ public:
 	/// @retval 1 The member did not exist before, and it has been added now.
 	/// @retval 0 The member already exists before this operation.
 	/// @see https://redis.io/commands/sadd
-	uint64_t sadd(std::string_view key, std::string_view member);
+	inline awaiter_t<uint64_t> sadd(std::string_view key, std::string_view member);
 
 	/// @brief Add multiple members to the given set.
 	/// @param key Key where the set is stored.
@@ -1575,7 +1554,7 @@ public:
 	/// @return Number of new members that have been added, i.e. members did not exist before.
 	/// @see https://redis.io/commands/sadd
 	template <typename Input>
-	uint64_t sadd(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> sadd(std::string_view key, Input first, Input last);
 
 	/// @brief Add multiple members to the given set.
 	/// @param key Key where the set is stored.
@@ -1583,7 +1562,7 @@ public:
 	/// @return Number of new members that have been added, i.e. members did not exist before.
 	/// @see https://redis.io/commands/sadd
 	template <typename T>
-	uint64_t sadd(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> sadd(std::string_view key, std::initializer_list<T> il) {
 		return sadd(key, il.begin(), il.end());
 	}
 
@@ -1591,7 +1570,7 @@ public:
 	/// @param key Key where the set is stored.
 	/// @return Number of members.
 	/// @see https://redis.io/commands/scard
-	uint64_t scard(std::string_view key);
+	inline awaiter_t<uint64_t> scard(std::string_view key);
 
 	/// @brief Get the difference between the first set and all successive sets.
 	/// @param first Iterator to the first set.
@@ -1616,7 +1595,7 @@ public:
 	/// @param key Key of the source set.
 	/// @return Number of members of the set.
 	/// @see https://redis.io/commands/sdiffstore
-	uint64_t sdiffstore(std::string_view destination, std::string_view key);
+	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination, std::string_view key);
 
 	/// @brief Same as `sdiff`, except that it stores the result to another set.
 	/// @param destination Key of the destination set.
@@ -1625,7 +1604,7 @@ public:
 	/// @return Number of members in the resulting set.
 	/// @see https://redis.io/commands/sdiffstore
 	template <typename Input>
-	uint64_t sdiffstore(std::string_view destination,
+	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination,
 		Input first,
 		Input last);
 
@@ -1635,7 +1614,7 @@ public:
 	/// @return Number of members in the resulting set.
 	/// @see https://redis.io/commands/sdiffstore
 	template <typename T>
-	uint64_t sdiffstore(std::string_view destination,
+	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination,
 		std::initializer_list<T> il) {
 		return sdiffstore(destination, il.begin(), il.end());
 	}
@@ -1663,7 +1642,7 @@ public:
 	/// @param key Key of the source set.
 	/// @return Number of members of the set.
 	/// @see https://redis.io/commands/sinter
-	uint64_t sinterstore(std::string_view destination, std::string_view key);
+	inline awaiter_t<uint64_t> sinterstore(std::string_view destination, std::string_view key);
 
 	/// @brief Same as `sinter`, except that it stores the result to another set.
 	/// @param destination Key of the destination set.
@@ -1672,7 +1651,7 @@ public:
 	/// @return Number of members in the resulting set.
 	/// @see https://redis.io/commands/sinter
 	template <typename Input>
-	uint64_t sinterstore(std::string_view destination,
+	inline awaiter_t<uint64_t> sinterstore(std::string_view destination,
 		Input first,
 		Input last);
 
@@ -1682,7 +1661,7 @@ public:
 	/// @return Number of members in the resulting set.
 	/// @see https://redis.io/commands/sinter
 	template <typename T>
-	uint64_t sinterstore(std::string_view destination,
+	inline awaiter_t<uint64_t> sinterstore(std::string_view destination,
 		std::initializer_list<T> il) {
 		return sinterstore(destination, il.begin(), il.end());
 	}
@@ -1772,7 +1751,7 @@ public:
 	/// @retval 1 If the given member exists, and has been removed.
 	/// @retval 0 If the given member does not exist.
 	/// @see https://redis.io/commands/srem
-	uint64_t srem(std::string_view key, std::string_view member);
+	inline awaiter_t<uint64_t> srem(std::string_view key, std::string_view member);
 
 	/// @brief Remove multiple members from set.
 	/// @param key Key where the set is stored.
@@ -1781,7 +1760,7 @@ public:
 	/// @return Number of members that have been removed.
 	/// @see https://redis.io/commands/srem
 	template <typename Input>
-	uint64_t srem(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> srem(std::string_view key, Input first, Input last);
 
 	/// @brief Remove multiple members from set.
 	/// @param key Key where the set is stored.
@@ -1789,7 +1768,7 @@ public:
 	/// @return Number of members that have been removed.
 	/// @see https://redis.io/commands/srem
 	template <typename T>
-	uint64_t srem(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> srem(std::string_view key, std::initializer_list<T> il) {
 		return srem(key, il.begin(), il.end());
 	}
 
@@ -1815,7 +1794,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/sscan
 	template <typename Output>
-	uint64_t sscan(std::string_view key,
+	inline awaiter_t<uint64_t> sscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count,
@@ -1829,7 +1808,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/sscan
 	template <typename Output>
-	uint64_t sscan(std::string_view key,
+	inline awaiter_t<uint64_t> sscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		Output output);
@@ -1842,7 +1821,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/sscan
 	template <typename Output>
-	uint64_t sscan(std::string_view key,
+	inline awaiter_t<uint64_t> sscan(std::string_view key,
 		uint64_t cursor,
 		uint64_t count,
 		Output output);
@@ -1854,7 +1833,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/sscan
 	template <typename Output>
-	uint64_t sscan(std::string_view key,
+	inline awaiter_t<uint64_t> sscan(std::string_view key,
 		uint64_t cursor,
 		Output output);
 
@@ -1881,7 +1860,7 @@ public:
 	/// @param key Key of the source set.
 	/// @return Number of members of the set.
 	/// @see https://redis.io/commands/sunionstore
-	uint64_t sunionstore(std::string_view destination, std::string_view key);
+	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, std::string_view key);
 
 	/// @brief Same as `sunion`, except that it stores the result to another set.
 	/// @param destination Key of the destination set.
@@ -1890,7 +1869,7 @@ public:
 	/// @return Number of members in the resulting set.
 	/// @see https://redis.io/commands/sunionstore
 	template <typename Input>
-	uint64_t sunionstore(std::string_view destination, Input first, Input last);
+	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, Input first, Input last);
 
 	/// @brief Same as `sunion`, except that it stores the result to another set.
 	/// @param destination Key of the destination set.
@@ -1898,7 +1877,7 @@ public:
 	/// @return Number of members in the resulting set.
 	/// @see https://redis.io/commands/sunionstore
 	template <typename T>
-	uint64_t sunionstore(std::string_view destination, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, std::initializer_list<T> il) {
 		return sunionstore(destination, il.begin(), il.end());
 	}
 
@@ -2081,7 +2060,7 @@ public:
 	///       `auto score = redis.command<OptionalDouble>("ZADD", "key", "XX", "INCR", 10, "mem");`
 	/// @see `UpdateType`
 	/// @see https://redis.io/commands/zadd
-	uint64_t zadd(std::string_view key,
+	inline awaiter_t<uint64_t> zadd(std::string_view key,
 		std::string_view member,
 		double score,
 		UpdateType type = UpdateType::ALWAYS,
@@ -2111,7 +2090,7 @@ public:
 	/// @see `UpdateType`
 	/// @see https://redis.io/commands/zadd
 	template <typename Input>
-	uint64_t zadd(std::string_view key,
+	inline awaiter_t<uint64_t> zadd(std::string_view key,
 		Input first,
 		Input last,
 		UpdateType type = UpdateType::ALWAYS,
@@ -2140,7 +2119,7 @@ public:
 	/// @see `UpdateType`
 	/// @see https://redis.io/commands/zadd
 	template <typename T>
-	uint64_t zadd(std::string_view key,
+	inline awaiter_t<uint64_t> zadd(std::string_view key,
 		std::initializer_list<T> il,
 		UpdateType type = UpdateType::ALWAYS,
 		bool changed = false) {
@@ -2151,7 +2130,7 @@ public:
 	/// @param key Key where the sorted set is stored.
 	/// @return Number of members in the sorted set.
 	/// @see https://redis.io/commands/zcard
-	uint64_t zcard(std::string_view key);
+	inline awaiter_t<uint64_t> zcard(std::string_view key);
 
 	/// @brief Get the number of members with score between a min-max score range.
 	///
@@ -2187,7 +2166,7 @@ public:
 	/// @see https://redis.io/commands/zcount
 	// TODO: add a string version of Interval: zcount("key", "(2.3", "5").
 	template <typename Interval>
-	uint64_t zcount(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zcount(std::string_view key, const Interval& interval);
 
 	/// @brief Increment the score of given member.
 	/// @param key Key where the sorted set is stored.
@@ -2206,7 +2185,7 @@ public:
 	///         have the same effect.
 	/// @see `Redis::zunionstore`
 	/// @see https://redis.io/commands/zinterstore
-	uint64_t zinterstore(std::string_view destination, std::string_view key, double weight);
+	inline awaiter_t<uint64_t> zinterstore(std::string_view destination, std::string_view key, double weight);
 
 	/// @brief Get intersection of multiple sorted sets, and store the result to another one.
 	///
@@ -2243,7 +2222,7 @@ public:
 	/// @see `Redis::zunionstore`
 	/// @see https://redis.io/commands/zinterstore
 	template <typename Input>
-	uint64_t zinterstore(std::string_view destination,
+	inline awaiter_t<uint64_t> zinterstore(std::string_view destination,
 		Input first,
 		Input last,
 		Aggregation type = Aggregation::SUM);
@@ -2277,7 +2256,7 @@ public:
 	/// @see `Redis::zunionstore`
 	/// @see https://redis.io/commands/zinterstore
 	template <typename T>
-	uint64_t zinterstore(std::string_view destination,
+	inline awaiter_t<uint64_t> zinterstore(std::string_view destination,
 		std::initializer_list<T> il,
 		Aggregation type = Aggregation::SUM) {
 		return zinterstore(destination, il.begin(), il.end(), type);
@@ -2317,7 +2296,7 @@ public:
 	/// @see https://redis.io/commands/zlexcount
 	// TODO: add a string version of Interval: zlexcount("key", "(abc", "abd").
 	template <typename Interval>
-	uint64_t zlexcount(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zlexcount(std::string_view key, const Interval& interval);
 
 	/// @brief Pop the member with highest score from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2520,7 +2499,7 @@ public:
 	/// @retval 1 If the member exists, and has been removed.
 	/// @retval 0 If the member does not exist.
 	/// @see https://redis.io/commands/zrem
-	uint64_t zrem(std::string_view key, std::string_view member);
+	inline awaiter_t<uint64_t> zrem(std::string_view key, std::string_view member);
 
 	/// @brief Remove multiple members from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2529,7 +2508,7 @@ public:
 	/// @return Number of members that have been removed.
 	/// @see https://redis.io/commands/zrem
 	template <typename Input>
-	uint64_t zrem(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> zrem(std::string_view key, Input first, Input last);
 
 	/// @brief Remove multiple members from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2537,7 +2516,7 @@ public:
 	/// @return Number of members that have been removed.
 	/// @see https://redis.io/commands/zrem
 	template <typename T>
-	uint64_t zrem(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> zrem(std::string_view key, std::initializer_list<T> il) {
 		return zrem(key, il.begin(), il.end());
 	}
 
@@ -2554,7 +2533,7 @@ public:
 	/// @see `BoundType`
 	/// @see https://redis.io/commands/zremrangebylex
 	template <typename Interval>
-	uint64_t zremrangebylex(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zremrangebylex(std::string_view key, const Interval& interval);
 
 	/// @brief Remove members in the given range ordered by rank.
 	/// @param key Key where the sorted set is stored.
@@ -2562,7 +2541,7 @@ public:
 	/// @param stop Stop rank.
 	/// @return Number of members removed.
 	/// @see https://redis.io/commands/zremrangebyrank
-	uint64_t zremrangebyrank(std::string_view key, uint64_t start, uint64_t stop);
+	inline awaiter_t<uint64_t> zremrangebyrank(std::string_view key, uint64_t start, uint64_t stop);
 
 	/// @brief Remove members in the given range ordered by score.
 	/// @param key Key where the sorted set is stored.
@@ -2571,7 +2550,7 @@ public:
 	/// @note See `Redis::zcount`'s *Example* part for how to set the `interval` parameter.
 	/// @see https://redis.io/commands/zremrangebyscore
 	template <typename Interval>
-	uint64_t zremrangebyscore(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zremrangebyscore(std::string_view key, const Interval& interval);
 
 	/// @brief Get a range of members by rank (ordered from highest to lowest).
 	///
@@ -2751,7 +2730,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
 	template <typename Output>
-	uint64_t zscan(std::string_view key,
+	inline awaiter_t<uint64_t> zscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count,
@@ -2765,7 +2744,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
 	template <typename Output>
-	uint64_t zscan(std::string_view key,
+	inline awaiter_t<uint64_t> zscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		Output output);
@@ -2778,7 +2757,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
 	template <typename Output>
-	uint64_t zscan(std::string_view key,
+	inline awaiter_t<uint64_t> zscan(std::string_view key,
 		uint64_t cursor,
 		uint64_t count,
 		Output output);
@@ -2790,7 +2769,7 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
 	template <typename Output>
-	uint64_t zscan(std::string_view key,
+	inline awaiter_t<uint64_t> zscan(std::string_view key,
 		uint64_t cursor,
 		Output output);
 
@@ -2811,7 +2790,7 @@ public:
 	///         have the same effect.
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zinterstore
-	uint64_t zunionstore(std::string_view destination, std::string_view key, double weight);
+	inline awaiter_t<uint64_t> zunionstore(std::string_view destination, std::string_view key, double weight);
 
 	/// @brief Get union of multiple sorted sets, and store the result to another one.
 	///
@@ -2848,7 +2827,7 @@ public:
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zunionstore
 	template <typename Input>
-	uint64_t zunionstore(std::string_view destination,
+	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
 		Input first,
 		Input last,
 		Aggregation type = Aggregation::SUM);
@@ -2882,7 +2861,7 @@ public:
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zunionstore
 	template <typename T>
-	uint64_t zunionstore(std::string_view destination,
+	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
 		std::initializer_list<T> il,
 		Aggregation type = Aggregation::SUM) {
 		return zunionstore(destination, il.begin(), il.end(), type);
