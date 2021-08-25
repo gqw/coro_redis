@@ -10,7 +10,6 @@ menu:
     identifier: c++-coro_redis
     parent: C++
     weight: 10
-hero: coro_redis.jpg
 ---
 
 
@@ -572,25 +571,53 @@ struct coroutine_handle {...}
 
 虽然协程表达式是临时变量但是它并不会因为协程暂停而销毁，所以将异步结果存放在协程表达式中更符合我们的预期，而且一旦await_resume调用结束临时对象变被销毁，这样内存利用率更高。
 
-既然可行，我们就对task_awaiter进行改造吧，先添加set_coro_return方法，然后在suspend_callback和resume_callback方法中添加task_awaiter指针参数，最后去掉task_awaiter的模版参数TASK_RET。经过改造task和task_awaiter都只需要关心与自己相关的模版参数，两者再无瓜葛。终于可以像下面的代码那样愉快的调用了：
+既然可行，我们就对task_awaiter进行改造吧，先添加set_coro_return方法，然后在suspend_callback和resume_callback方法中添加task_awaiter指针参数，最后去掉task_awaiter的模版参数TASK_RET。经过改造task和task_awaiter都只需要关心与自己相关的模版参数，两者再无瓜葛。终于可以像下面的代码那样愉快的调用了, 代码见`tests/303`：
 
 ```CPP
-task<bool> watchdog::coro_call_test() {
-    auto r = co_await redis_client::get().coro_echo("test");
-    auto var1 =co_await redis_client::get().coro_incr("var1");
-    auto var2 = co_await redis_client::get().coro_incr("var2");
-    auto var3 = std::to_string(var1.value() + var2.value());
-    co_await redis_client::get().coro_set("var3", var3);
-    auto var3_2 = co_await redis_client::get().coro_get("var3");
-    LOG_DEBUG("r: {}, var1: {}, var2: {}, var3: {}, var3_2: {}",
-        r.value(), var1.value(), var2.value(), var3, var3_2.value());
-    co_return true;
+task<bool> coro_redis_test(event_base* base, std::string_view host, uint16_t port) {
+	auto conn = co_await client::get().connect(base, host, port, 50);
+	ASSERT_CO_RETURN(conn.has_value(), false, "connect to redis failed.");
+
+	auto scan_ret = co_await conn->scan(0);
+	ASSERT_CO_RETURN(scan_ret.has_value(), false, "call scan failed.");
+	auto [cursor, keys] = *scan_ret;
+	LOG_TRACE("scan {}", cursor);
+
+	auto echo_ret = co_await conn->echo("hello");
+	ASSERT_CO_RETURN(echo_ret.has_value(), false, "call echo failed.");
+	LOG_TRACE("echo {}", *echo_ret);
+
+	auto incr_ret = co_await conn->incr("val1");
+	ASSERT_CO_RETURN(incr_ret.has_value(), false, "call incr failed.");
+	LOG_TRACE("incr {}", *incr_ret);
+
+	auto set_ret = co_await conn->set("val3", 100);
+	ASSERT_CO_RETURN(set_ret.has_value(), false, "call set failed.");
+	LOG_TRACE("set {}", *set_ret);
+
+	auto set_ret2 = co_await conn->set("val4", "100");
+	ASSERT_CO_RETURN(set_ret2.has_value(), false, "call set failed.");
+	LOG_TRACE("set {}", *set_ret2);
+
+	auto get_ret = co_await conn->get("val3");
+	ASSERT_CO_RETURN(get_ret.has_value(), false, "call get failed.");
+	LOG_TRACE("get {}", *get_ret);
+
+	auto del_cont = co_await conn->del("test", "val1", "val2");
+	ASSERT_CO_RETURN(del_cont.has_value(), false, "del keys failed");
+	LOG_TRACE("del key count {}", *del_cont);
+
+	co_return true;
 }
 ```
 
-自此hiredis协程的封装工作已经结束了，剩下的就是针对redis的各种命令进行特化处理。
+自此hiredis协程的基本封装工作已经结束了，剩下的就是针对redis的各种命令进行优化处理。
 
+## 待完成内容
 
+	1. redis指令还未完全封装完
+	2. 网络库封装，现在默认使用libevent
+	3. 连接池
 
 
 
