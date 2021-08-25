@@ -16,6 +16,7 @@ struct event_base;
 namespace coro_redis {
 class client final {
 public:
+	using awaiter_t = task_awaiter<connection, const redisAsyncContext*>;
 	struct timeval_t {
 		long    tv_sec;         /* seconds */
 		long    tv_usec;        /* and microseconds */
@@ -27,8 +28,10 @@ public:
         return clt;
     }
 
-    task_awaiter<connection> connect(event_base* base, std::string_view host_sv, uint16_t port, long timeout_seconds = 5) {
-		return task_awaiter<connection>([base, host = std::string(host_sv), port, timeout_seconds](task_awaiter<connection>* awaiter, const coro::coroutine_handle<>&) {
+
+
+	awaiter_t connect(event_base* base, std::string_view host_sv, uint16_t port, long timeout_seconds = 5) {
+		return awaiter_t([base, host = std::string(host_sv), port, timeout_seconds](awaiter_t* awaiter, const coro::coroutine_handle<>&) {
 			ASSERT_RETURN(base, void(0), "event base is nullptr");
 			ASSERT_RETURN(!host.empty(), void(0), "redis host not set");
 			ASSERT_RETURN(port > 0, void(0), "redis port not set");
@@ -48,10 +51,9 @@ public:
 			ASSERT_RETURN(redisLibeventAttach(actx, base) == REDIS_OK, void(0), "redis event attach failed.");
 			actx->data = awaiter;
 			redisAsyncSetConnectCallback(actx, [](const struct redisAsyncContext* actx, int status) {
-				auto* awaiter = (task_awaiter<connection>*)actx->data;
+				auto* awaiter = (awaiter_t*)actx->data;
 				if (status == REDIS_OK) {
-					auto conn = connection((redisAsyncContext*)(actx));
-					awaiter->set_coro_return(std::move(conn));
+					awaiter->set_coro_return(actx);
 					LOG_INFO("redis connect success.", status);
 				}
 				else {
@@ -62,11 +64,12 @@ public:
 				});
 			redisAsyncSetDisconnectCallback(actx, [](const struct redisAsyncContext* actx, int status) {
 				LOG_INFO("redis disconnect status: {}", status);
-				auto* awaiter = (task_awaiter<connection>*)actx->data;
+				auto* awaiter = (awaiter_t*)actx->data;
 				awaiter->set_coro_return(nullptr);
 				});
-			}, [](task_awaiter<connection>* awaiter, const coro::coroutine_handle<>&) -> std::optional<connection> {
-				return std::any_cast<connection>(awaiter->coro_return());
+			}, [](awaiter_t* awaiter, const coro::coroutine_handle<>&) -> std::optional<connection> {
+				ASSERT_RETURN(awaiter->coro_return().has_value(), std::nullopt, "redis connect failed.");
+				return std::move(connection((redisAsyncContext*)(awaiter->coro_return().value())));
 			});
     }
 

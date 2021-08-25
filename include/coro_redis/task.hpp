@@ -110,10 +110,10 @@ public:
     }
 };
 
-template<typename CORO_RET>
+template<typename CORO_RET, typename STORAGE_T = std::any>
 struct task_awaiter {
-    typedef std::function<void(task_awaiter<CORO_RET>* awaiter, const coro::coroutine_handle<>&)> suspend_cb_type;
-    typedef std::function<std::optional<CORO_RET>(task_awaiter<CORO_RET>* awaiter, const coro::coroutine_handle<>&)> resume_cb_type;
+    typedef std::function<void(task_awaiter<CORO_RET, STORAGE_T>* awaiter, const coro::coroutine_handle<>&)> suspend_cb_type;
+    typedef std::function<std::optional<CORO_RET>(task_awaiter<CORO_RET, STORAGE_T>* awaiter, const coro::coroutine_handle<>&)> resume_cb_type;
     task_awaiter() = default;
     task_awaiter(suspend_cb_type suspend_callback, resume_cb_type resume_callback) :
         suspend_callback_(suspend_callback),
@@ -135,11 +135,11 @@ struct task_awaiter {
         return std::nullopt;
     }
 
-    void set_coro_return(std::any coro_ret) {
-        if (coro_ret.has_value()) coro_tmp_return_ = coro_ret;
+    void set_coro_return(STORAGE_T coro_ret) {
+        coro_tmp_return_ = coro_ret;
     }
 
-    std::any& coro_return() { return coro_tmp_return_; }
+    std::optional<STORAGE_T>& coro_return() { return coro_tmp_return_; }
 
     void resume() { h_coro_.resume(); }
 
@@ -149,7 +149,7 @@ private:
     bool want_pause_ = false;
     coro::coroutine_handle<> h_coro_;
 
-    std::any coro_tmp_return_{};
+    std::optional<STORAGE_T> coro_tmp_return_{};
 };
 
 } // namespace coro_redis

@@ -17,7 +17,12 @@ using namespace coro_redis;
 task<bool> coro_redis_test(event_base* base, std::string_view host, uint16_t port) {
 	auto conn = co_await client::get().connect(base, host, port, 50);
 	ASSERT_CO_RETURN(conn.has_value(), false, "connect to redis failed.");
-	
+
+	auto scan_ret = co_await conn->scan(0);
+	ASSERT_CO_RETURN(scan_ret.has_value(), false, "call scan failed.");
+	auto [cursor, keys] = *scan_ret;
+	LOG_TRACE("scan {}", cursor);
+
 	auto echo_ret = co_await conn->echo("hello");
 	ASSERT_CO_RETURN(echo_ret.has_value(), false, "call echo failed.");
 	LOG_TRACE("echo {}", *echo_ret);
@@ -26,10 +31,21 @@ task<bool> coro_redis_test(event_base* base, std::string_view host, uint16_t por
 	ASSERT_CO_RETURN(incr_ret.has_value(), false, "call incr failed.");
 	LOG_TRACE("incr {}", *incr_ret);
 
+	auto set_ret = co_await conn->set("val3", 100);
+	ASSERT_CO_RETURN(set_ret.has_value(), false, "call set failed.");
+	LOG_TRACE("set {}", *set_ret);
+
+	auto set_ret2 = co_await conn->set("val4", "100");
+	ASSERT_CO_RETURN(set_ret2.has_value(), false, "call set failed.");
+	LOG_TRACE("set {}", *set_ret2);
+
+	auto get_ret = co_await conn->get("val3");
+	ASSERT_CO_RETURN(get_ret.has_value(), false, "call get failed.");
+	LOG_TRACE("get {}", *get_ret);
+
 	auto del_cont = co_await conn->del("test", "val1", "val2");
 	ASSERT_CO_RETURN(del_cont.has_value(), false, "del keys failed");
 	LOG_TRACE("del key count {}", *del_cont);
-
 
 	event_base_loopexit(base, nullptr); // exit event dispatch
 	co_return true;

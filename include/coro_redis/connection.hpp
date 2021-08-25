@@ -10,24 +10,42 @@
 #include <fmt/format.h>
 
 namespace coro_redis {
+
+	template<typename T>
+	struct is_string
+		: public std::disjunction<
+		std::is_same<char*, typename std::decay_t<T>>,
+		std::is_same<const char*, typename std::decay_t<T>>,
+		std::is_same<std::string, typename std::decay_t<T>>,
+		std::is_same<std::string_view, typename std::decay_t<T>>
+		> {
+	};
+
+template<typename T>
+concept RedisSetValueType = std::is_integral<T>::value || is_string<T>::value;
+
 class connection {
 public:
 	using cptr = std::shared_ptr<connection>;
+	template <typename CORO_RET>
+	using awaiter_t = task_awaiter<CORO_RET, redisReply*>;
 
 	connection(redisAsyncContext* actx): redis_ctx_(actx) {}
-	// 发送协程命令
-	template<typename CORO_RET = redisReply*>
-	task_awaiter<CORO_RET> command(std::string_view cmd) const;
 
-	inline task_awaiter<std::string> get(std::string_view key) const {
-		return command<std::string>(fmt::format("get {}", key));
-	}
+	/// @brief Send redis command.
+	/// @param cmd Redis command.
+	/// @return Redis return.
+	template<typename CORO_RET = std::string>
+	awaiter_t<CORO_RET> command(std::string_view cmd) const;
 
-	inline task_awaiter<std::string> set(std::string_view key, std::string_view value) const {
-		return command<std::string>(fmt::format("set {} {}", key, value));
-	}
+	/// @brief Send redis command.
+	/// @param cmd Redis command.
+	/// @param reply_op Callback for deal redis reply.
+	/// @return Redis return.
+	template<typename CORO_RET>
+	awaiter_t<CORO_RET> command(std::string_view cmd, std::function<std::optional<CORO_RET> (redisReply*)>&& reply_op) const;
 
-	inline task_awaiter<uint64_t> incr(std::string_view key) const {
+	inline awaiter_t<uint64_t> incr(std::string_view key) const {
 		return command<uint64_t>(fmt::format("incr {}", key));
 	}
 
@@ -60,7 +78,7 @@ public:
 	/// @note Normally, you should not call this method.
 	///       Instead, you should set password with `ConnectionOptions` or URI.
 	/// @see https://redis.io/commands/auth
-	inline task_awaiter<std::string> auth(std::string_view password) {
+	inline awaiter_t<std::string> auth(std::string_view password) {
 		return command<std::string>(fmt::format("auth {}", password));
 	}
 
@@ -71,7 +89,7 @@ public:
 	///       Instead, you should set password with `ConnectionOptions` or URI.
 	///       Also this overload only works with Redis 6.0 or later.
 	/// @see https://redis.io/commands/auth
-	inline task_awaiter<std::string> auth(std::string_view user, std::string_view password) {
+	inline awaiter_t<std::string> auth(std::string_view user, std::string_view password) {
 		return command<std::string>(fmt::format("auth {} {}", user, password));
 	}
 
@@ -79,14 +97,14 @@ public:
 	/// @param msg Message to be sent.
 	/// @return Return the given message.
 	/// @see https://redis.io/commands/echo
-	inline task_awaiter<std::string> echo(std::string_view msg) const {
+	inline awaiter_t<std::string> echo(std::string_view msg) const {
 		return command<std::string>(fmt::format("echo {}", msg));
 	}
 
 	/// @brief Test if the connection is alive.
 	/// @return Always return *PONG*.
 	/// @see https://redis.io/commands/ping
-	inline task_awaiter<std::string> ping() {
+	inline awaiter_t<std::string> ping() {
 		return command<std::string>("ping");
 	}
 
@@ -94,7 +112,7 @@ public:
 	/// @param msg Message sent to Redis.
 	/// @return Return the given message.
 	/// @see https://redis.io/commands/ping
-	inline task_awaiter<std::string> ping(std::string_view msg) {
+	inline awaiter_t<std::string> ping(std::string_view msg) {
 		return command<std::string>(fmt::format("ping {}", msg));
 	}
 
@@ -103,7 +121,7 @@ public:
 	// So we DO NOT support the QUIT command. If you want to quit connection to
 	// server, just destroy the Redis object.
 	//
-	// void quit();
+	// inline awaiter_t<std::string> quit();
 
 	// We get a connection from the pool, and send the SELECT command to switch
 	// to a specified DB. However, when we try to send other commands to the
@@ -120,13 +138,13 @@ public:
 	// However, since Pipeline and Transaction always send multiple commands on a
 	// single connection, these two classes have a *select* method.
 	//
-	// void select(uint64_t idx);
+	// inline awaiter_t<std::string> select(uint64_t idx);
 
 	/// @brief Swap two Redis databases.
 	/// @param idx1 The index of the first database.
 	/// @param idx2 The index of the second database.
 	/// @see https://redis.io/commands/swapdb
-	inline task_awaiter<std::string> swapdb(uint64_t idx1, uint64_t idx2) {
+	inline awaiter_t<std::string> swapdb(uint64_t idx1, uint64_t idx2) {
 		return command<std::string>(fmt::format("swapdb {} {}", idx1, idx2));
 	}
 
@@ -134,41 +152,41 @@ public:
 
 	/// @brief Rewrite AOF in the background.
 	/// @see https://redis.io/commands/bgrewriteaof
-	inline task_awaiter<std::string> bgrewriteaof() {
+	inline awaiter_t<std::string> bgrewriteaof() {
 		return command<std::string>("bgrewriteaof");
 	}
 
 	/// @brief Save database in the background.
 	/// @see https://redis.io/commands/bgsave
-	inline task_awaiter<std::string> bgsave() {
+	inline awaiter_t<std::string> bgsave() {
 		return command<std::string>("bgsave");
 	}
 
 	/// @brief Get the size of the currently selected database.
 	/// @return Number of keys in currently selected database.
 	/// @see https://redis.io/commands/dbsize
-	inline task_awaiter<uint64_t> dbsize() {
+	inline awaiter_t<uint64_t> dbsize() {
 		return command<uint64_t>("dbsize");
 	}
 
 	/// @brief Remove keys of all databases.
 	/// @param async Whether flushing databases asynchronously, i.e. without blocking the server.
 	/// @see https://redis.io/commands/flushall
-	inline task_awaiter<std::string> flushall(bool async = false) {
+	inline awaiter_t<std::string> flushall(bool async = false) {
 		return command<std::string>(async ? "FLUSHALL ASYNC" : "FLUSHALL SYNC");
 	}
 
 	/// @brief Remove keys of current databases.
 	/// @param async Whether flushing databases asynchronously, i.e. without blocking the server.
 	/// @see https://redis.io/commands/flushdb
-	inline task_awaiter<std::string> flushdb(bool async = false) {
+	inline awaiter_t<std::string> flushdb(bool async = false) {
 		return command<std::string>(async ? "FLUSHDB ASYNC" : "FLUSHDB SYNC");
 	}
 
 	/// @brief Get the info about the server.
 	/// @return Server info.
 	/// @see https://redis.io/commands/info
-	inline task_awaiter<std::string> info() {
+	inline awaiter_t<std::string> info() {
 		return command<std::string>("info");
 	}
 
@@ -176,20 +194,20 @@ public:
 	/// @param section Section.
 	/// @return Server info.
 	/// @see https://redis.io/commands/info
-	inline task_awaiter<std::string> info(std::string_view section) {
+	inline awaiter_t<std::string> info(std::string_view section) {
 		return command<std::string>(fmt::format("info {}", section));
 	}
 
 	/// @brief Get the UNIX timestamp in seconds, at which the database was saved successfully.
 	/// @return The last saving time.
 	/// @see https://redis.io/commands/lastsave
-	inline task_awaiter<uint64_t> lastsave() {
+	inline awaiter_t<uint64_t> lastsave() {
 		return command<uint64_t>("lastsave");
 	}
 
 	/// @brief Save databases into RDB file **synchronously**, i.e. block the server during saving.
 	/// @see https://redis.io/commands/save
-	inline task_awaiter<std::string> save() {
+	inline awaiter_t<std::string> save() {
 		return command<std::string>("save");
 	}
 
@@ -203,7 +221,7 @@ public:
 	/// @retval 0 If the key does not exist.
 	/// @see https://redis.io/commands/del
 	template<typename ...Args>
-	inline task_awaiter<uint64_t> del(Args&&... keys) {
+	inline awaiter_t<uint64_t> del(Args&&... keys) {
 		std::string cmd("del");
 		(cmd.append(" ").append(keys), ...);
 		return command<uint64_t>(std::move(cmd));
@@ -215,7 +233,7 @@ public:
 	/// @return The serialized value.
 	/// @note If key does not exist, `dump` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/dump
-	inline task_awaiter<std::string> dump(std::string_view key) {
+	inline awaiter_t<std::string> dump(std::string_view key) {
 		return command<std::string>(fmt::format("dump {}", key));
 	}
 
@@ -226,7 +244,7 @@ public:
 	/// @retval 0 If key does not exist.
 	/// @see https://redis.io/commands/exists
 	template<typename ...Args>
-	inline task_awaiter<uint64_t> exists(Args&&... keys) {
+	inline awaiter_t<uint64_t> exists(Args&&... keys) {
 		std::string cmd("exists");
 		(cmd.append(" ").append(keys), ...);
 		return command<uint64_t>(std::move(cmd));
@@ -239,7 +257,7 @@ public:
 	/// @retval 1 If timeout has been set.
 	/// @retval 0 If key does not exist.
 	/// @see https://redis.io/commands/expire
-	inline task_awaiter<uint64_t> expire(std::string_view key, uint64_t timeout) {
+	inline awaiter_t<uint64_t> expire(std::string_view key, uint64_t timeout) {
 		return command<uint64_t>(fmt::format("expire {} {}", key, timeout));
 	}
 
@@ -250,10 +268,10 @@ public:
 	/// @retval true If timeout has been set.
 	/// @retval false If key does not exist.
 	/// @see https://redis.io/commands/expireat
-	inline task_awaiter<uint64_t> expireat(std::string_view key, uint64_t timestamp) {
+	inline awaiter_t<uint64_t> expireat(std::string_view key, uint64_t timestamp) {
 		return command<uint64_t>(fmt::format("expireat {} {}", key, timestamp));
 	}
-/*
+
 	/// @brief Get keys matching the given pattern.
 	/// @param pattern Pattern.
 	/// @param output Output iterator to the destination where the returned keys are stored.
@@ -261,10 +279,10 @@ public:
 	///       especially when the data set is very big.
 	/// @see `Redis::scan`
 	/// @see https://redis.io/commands/keys
-	inline task_awaiter<std::vector<std::string>> keys(std::string_view pattern) {
-		return command<std::vector<std::string>>(fmt::format("keys {}", pattern));
-	}
-*/
+	//inline awaiter_t<std::vector<std::string>> keys(std::string_view pattern) {
+	//	return command<std::vector<std::string>>(fmt::format("keys {}", pattern));
+	//}
+
 	/// @brief Move a key to the given database.
 	/// @param key Key.
 	/// @param db The destination database.
@@ -272,7 +290,7 @@ public:
 	/// @retval true If key has been moved.
 	/// @retval false If key was not moved.
 	/// @see https://redis.io/commands/move
-	inline task_awaiter<uint64_t> move(std::string_view key, uint64_t db) {
+	inline awaiter_t<uint64_t> move(std::string_view key, uint64_t db) {
 		return command<uint64_t>(fmt::format("move {} {}", key, db));
 	}
 
@@ -282,7 +300,7 @@ public:
 	/// @retval true If timeout has been removed.
 	/// @retval false If key does not exist, or does not have an associated timeout.
 	/// @see https://redis.io/commands/persist
-	inline task_awaiter<uint64_t> persist(std::string_view key) {
+	inline awaiter_t<uint64_t> persist(std::string_view key) {
 		return command<uint64_t>(fmt::format("persist {}", key));
 	}
 
@@ -293,7 +311,7 @@ public:
 	/// @retval true If timeout has been set.
 	/// @retval false If key does not exist.
 	/// @see https://redis.io/commands/pexpire
-	inline task_awaiter<uint64_t> pexpire(std::string_view key, uint64_t timeout) {
+	inline awaiter_t<uint64_t> pexpire(std::string_view key, uint64_t timeout) {
 		return command<uint64_t>(fmt::format("pexpire {} {}", key, timeout));
 	}
 
@@ -304,15 +322,15 @@ public:
 	/// @retval true If timeout has been set.
 	/// @retval false If key does not exist.
 	/// @see https://redis.io/commands/pexpireat
-	inline task_awaiter<uint64_t> pexpireat(std::string_view key, uint64_t timestamp) {
-		return command<uint64_t>(fmt::format("pexpireat {} {}", key, timeout));
+	inline awaiter_t<uint64_t> pexpireat(std::string_view key, uint64_t timestamp) {
+		return command<uint64_t>(fmt::format("pexpireat {} {}", key, timestamp));
 	}
 
 	/// @brief Get the TTL of a key in milliseconds.
 	/// @param key Key.
 	/// @return TTL of the key in milliseconds.
 	/// @see https://redis.io/commands/pttl
-	inline task_awaiter<uint64_t> pttl(std::string_view key) {
+	inline awaiter_t<uint64_t> pttl(std::string_view key) {
 		return command<uint64_t>(fmt::format("pttl {}", key));
 	}
 
@@ -320,16 +338,18 @@ public:
 	/// @return A random key.
 	/// @note If the database is empty, `randomkey` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/randomkey
-	inline task_awaiter<std::string> randomkey() {
+	inline awaiter_t<std::string> randomkey() {
 		return command<std::string>("randomkey");
 	}
 
-/*
+
 	/// @brief Rename `key` to `newkey`.
 	/// @param key Key to be renamed.
 	/// @param newkey The new name of the key.
 	/// @see https://redis.io/commands/rename
-	void rename(std::string_view key, std::string_view newkey);
+	inline awaiter_t<std::string> rename(std::string_view key, std::string_view newkey) {
+		return command<std::string>(fmt::format("rename {} {}", key, newkey));
+	}
 
 	/// @brief Rename `key` to `newkey` if `newkey` does not exist.
 	/// @param key Key to be renamed.
@@ -338,7 +358,9 @@ public:
 	/// @retval true If key has been renamed.
 	/// @retval false If newkey already exists.
 	/// @see https://redis.io/commands/renamenx
-	bool renamenx(std::string_view key, std::string_view newkey);
+	inline awaiter_t<uint64_t> renamenx(std::string_view key, std::string_view newkey) {
+		return command<uint64_t>(fmt::format("renamenx {} {}", key, newkey));
+	}
 
 	/// @brief Create a key with the value obtained by `Redis::dump`.
 	/// @param key Key.
@@ -347,22 +369,12 @@ public:
 	/// @param replace Whether to overwrite an existing key.
 	///                If `replace` is `true` and key already exists, throw an exception.
 	/// @see https://redis.io/commands/restore
-	void restore(std::string_view key,
+	inline awaiter_t<std::string> restore(std::string_view key,
 		std::string_view val,
 		uint64_t ttl,
-		bool replace = false);
-
-	/// @brief Create a key with the value obtained by `Redis::dump`.
-	/// @param key Key.
-	/// @param val Value obtained by `Redis::dump`.
-	/// @param ttl Timeout of the created key in milliseconds. If `ttl` is 0, set no timeout.
-	/// @param replace Whether to overwrite an existing key.
-	///                If `replace` is `true` and key already exists, throw an exception.
-	/// @see https://redis.io/commands/restore
-	void restore(std::string_view key,
-		std::string_view val,
-		const std::chrono::milliseconds& ttl = std::chrono::milliseconds{ 0 },
-		bool replace = false);
+		bool replace = false) {
+		return command<std::string>(fmt::format("restore {} {} {} {}", key, ttl, val, replace));
+	}
 
 	// TODO: sort
 
@@ -386,42 +398,17 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/scan
 	/// TODO: support the TYPE option for Redis 6.0.
-	template <typename Output>
-	uint64_t scan(uint64_t cursor,
-		std::string_view pattern,
-		uint64_t count,
-		Output output);
+	using scan_ret_t = std::pair<uint64_t, std::vector<std::string>>;
+	
+	inline awaiter_t<scan_ret_t> scan(uint64_t cursor, uint64_t count = 0) {
+		return scan(cursor, "", count);
+	}
 
-	/// @brief Scan all keys of the database.
-	/// @param cursor Cursor.
-	/// @param output Output iterator to the destination where the returned keys are stored.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/scan
-	template <typename Output>
-	uint64_t scan(uint64_t cursor,
-		Output output);
+	inline awaiter_t<scan_ret_t> scan(uint64_t cursor, 
+		std::string_view pattern, 
+		uint64_t count = 0);
 
-	/// @brief Scan keys of the database matching the given pattern.
-	/// @param cursor Cursor.
-	/// @param pattern Pattern of the keys to be scanned.
-	/// @param output Output iterator to the destination where the returned keys are stored.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/scan
-	template <typename Output>
-	uint64_t scan(uint64_t cursor,
-		std::string_view pattern,
-		Output output);
-
-	/// @brief Scan keys of the database matching the given pattern.
-	/// @param cursor Cursor.
-	/// @param count A hint for how many keys to be scanned.
-	/// @param output Output iterator to the destination where the returned keys are stored.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/scan
-	template <typename Output>
-	uint64_t scan(uint64_t cursor,
-		uint64_t count,
-		Output output);
+/*
 
 	/// @brief Update the last access time of the given key.
 	/// @param key Key.
@@ -589,6 +576,7 @@ public:
 	/// @return The value after the decrement.
 	/// @see https://redis.io/commands/decrby
 	uint64_t decrby(std::string_view key, uint64_t decrement);
+*/
 
 	/// @brief Get the string value stored at key.
 	///
@@ -604,8 +592,11 @@ public:
 	/// @return The value stored at key.
 	/// @note If key does not exist, `get` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/get
-	OptionalString get(std::string_view key);
+	inline awaiter_t<std::string> get(std::string_view key) const {
+		return command<std::string>(fmt::format("get {}", key));
+	}
 
+/*
 	/// @brief Get the bit value at offset in the string.
 	/// @param key Key.
 	/// @param offset Offset.
@@ -672,7 +663,7 @@ public:
 	///       key is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/mget
 	template <typename Input, typename Output>
-	void mget(Input first, Input last, Output output);
+	inline awaiter_t<std::string> mget(Input first, Input last, Output output);
 
 	/// @brief Get the values of multiple keys atomically.
 	///
@@ -694,7 +685,7 @@ public:
 	///       key is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/mget
 	template <typename T, typename Output>
-	void mget(std::initializer_list<T> il, Output output) {
+	inline awaiter_t<std::string> mget(std::initializer_list<T> il, Output output) {
 		mget(il.begin(), il.end(), output);
 	}
 
@@ -711,7 +702,7 @@ public:
 	/// @param last Off-the-end iterator to the given range.
 	/// @see https://redis.io/commands/mset
 	template <typename Input>
-	void mset(Input first, Input last);
+	inline awaiter_t<std::string> mset(Input first, Input last);
 
 	/// @brief Set multiple key-value pairs.
 	///
@@ -722,7 +713,7 @@ public:
 	/// @param il Initializer list of key-value pairs.
 	/// @see https://redis.io/commands/mset
 	template <typename T>
-	void mset(std::initializer_list<T> il) {
+	inline awaiter_t<std::string> mset(std::initializer_list<T> il) {
 		mset(il.begin(), il.end());
 	}
 
@@ -742,7 +733,7 @@ public:
 	/// @retval false If no key was set, i.e. at least one key already exist.
 	/// @see https://redis.io/commands/msetnx
 	template <typename Input>
-	bool msetnx(Input first, Input last);
+	inline awaiter_t<uint64_t> msetnx(Input first, Input last);
 
 	/// @brief Set the given key-value pairs if all specified keys do not exist.
 	///
@@ -756,7 +747,7 @@ public:
 	/// @retval false If no key was set, i.e. at least one key already exist.
 	/// @see https://redis.io/commands/msetnx
 	template <typename T>
-	bool msetnx(std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> msetnx(std::initializer_list<T> il) {
 		return msetnx(il.begin(), il.end());
 	}
 
@@ -765,7 +756,7 @@ public:
 	/// @param ttl Time-To-Live in milliseconds.
 	/// @param val Value.
 	/// @see https://redis.io/commands/psetex
-	void psetex(std::string_view key,
+	inline awaiter_t<std::string> psetex(std::string_view key,
 		uint64_t ttl,
 		std::string_view val);
 
@@ -774,9 +765,11 @@ public:
 	/// @param ttl Time-To-Live in milliseconds.
 	/// @param val Value.
 	/// @see https://redis.io/commands/psetex
-	void psetex(std::string_view key,
+	inline awaiter_t<std::string> psetex(std::string_view key,
 		const std::chrono::milliseconds& ttl,
 		std::string_view val);
+
+*/
 
 	/// @brief Set a key-value pair.
 	///
@@ -804,11 +797,46 @@ public:
 	/// @retval false If the key was not set, because of the given option.
 	/// @see https://redis.io/commands/set
 	// TODO: Support KEEPTTL option for Redis 6.0
-	bool set(std::string_view key,
-		std::string_view val,
-		const std::chrono::milliseconds& ttl = std::chrono::milliseconds(0),
-		UpdateType type = UpdateType::ALWAYS);
+	enum RedisSetType {
+		EXIST,
+		NOT_EXIST,
+		ALWAYS
+	};
+	enum RedisTTLType {
+		EX,
+		PX,
+		EXAT,
+		PXAT,
+		KEEPTTL,
+	};
 
+	template<RedisSetValueType T>
+	inline awaiter_t<std::string> set(std::string_view key,
+		T val,
+		uint64_t ttl = 0,
+		RedisTTLType ttl_type = RedisTTLType::EX,
+		RedisSetType type = RedisSetType::ALWAYS) {
+		std::string cmd(fmt::format("set {} {}", key, val));
+		if (ttl > 0 && ttl_type != KEEPTTL) {
+			switch (ttl_type) {
+			case EX: cmd.append(" EX "); break;
+			case PX: cmd.append(" PX "); break;
+			case EXAT: cmd.append(" EXAT "); break;
+			case PXAT: cmd.append(" PXAT "); break;
+			}
+			cmd.append(std::to_string(ttl));
+		}
+		if (ttl_type == KEEPTTL) {
+			cmd.append(" KEEPTTL ");
+		}
+		switch (type) {
+		case EXIST: cmd.append(" XX "); break;
+		case NOT_EXIST: cmd.append(" NX "); break;
+		}
+		return command<std::string>(std::move(cmd));
+	}
+
+/*
 	// TODO: add SETBIT command.
 
 	/// @brief Set key-value pair with the given timeout in seconds.
@@ -816,7 +844,7 @@ public:
 	/// @param ttl Time-To-Live in seconds.
 	/// @param val Value.
 	/// @see https://redis.io/commands/setex
-	void setex(std::string_view key,
+	inline awaiter_t<std::string> setex(std::string_view key,
 		uint64_t ttl,
 		std::string_view val);
 
@@ -825,7 +853,7 @@ public:
 	/// @param ttl Time-To-Live in seconds.
 	/// @param val Value.
 	/// @see https://redis.io/commands/setex
-	void setex(std::string_view key,
+	inline awaiter_t<std::string> setex(std::string_view key,
 		const std::chrono::seconds& ttl,
 		std::string_view val);
 
@@ -836,7 +864,7 @@ public:
 	/// @retval true If the key has been set.
 	/// @retval false If the key was not set, i.e. the key already exists.
 	/// @see https://redis.io/commands/setnx
-	bool setnx(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> setnx(std::string_view key, std::string_view val);
 
 	/// @brief Set the substring starting from `offset` to the given value.
 	/// @param key Key.
@@ -1127,7 +1155,7 @@ public:
 	/// @param output Output iterator to the destination where the results are saved.
 	/// @see https://redis.io/commands/lrange
 	template <typename Output>
-	void lrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
+	inline awaiter_t<std::string> lrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
 
 	/// @brief Remove the first `count` occurrences of elements equal to `val`.
 	/// @param key Key where the list is stored.
@@ -1143,14 +1171,14 @@ public:
 	/// @param index Index of the element to be set.
 	/// @param val Value.
 	/// @see https://redis.io/commands/lset
-	void lset(std::string_view key, uint64_t index, std::string_view val);
+	inline awaiter_t<std::string> lset(std::string_view key, uint64_t index, std::string_view val);
 
 	/// @brief Trim a list to keep only element in the given range.
 	/// @param key Key where the key is stored.
 	/// @param start Start of the index.
 	/// @param stop End of the index.
 	/// @see https://redis.io/commands/ltrim
-	void ltrim(std::string_view key, uint64_t start, uint64_t stop);
+	inline awaiter_t<std::string> ltrim(std::string_view key, uint64_t start, uint64_t stop);
 
 	/// @brief Pop the last element of a list.
 	/// @param key Key where the list is stored.
@@ -1237,7 +1265,7 @@ public:
 	/// @retval true If the field exists in hash.
 	/// @retval false If the field does not exist.
 	/// @see https://redis.io/commands/hexists
-	bool hexists(std::string_view key, std::string_view field);
+	inline awaiter_t<uint64_t> hexists(std::string_view key, std::string_view field);
 
 	/// @brief Get the value of the given field.
 	/// @param key Key where the hash is stored.
@@ -1261,7 +1289,7 @@ public:
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hgetall
 	template <typename Output>
-	void hgetall(std::string_view key, Output output);
+	inline awaiter_t<std::string> hgetall(std::string_view key, Output output);
 
 	/// @brief Increment the integer stored at the given field.
 	/// @param key Key where the hash is stored.
@@ -1286,7 +1314,7 @@ public:
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hkeys
 	template <typename Output>
-	void hkeys(std::string_view key, Output output);
+	inline awaiter_t<std::string> hkeys(std::string_view key, Output output);
 
 	/// @brief Get the number of fields of the given hash.
 	/// @param key Key where the hash is stored.
@@ -1317,7 +1345,7 @@ public:
 	///       field is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/hmget
 	template <typename Input, typename Output>
-	void hmget(std::string_view key, Input first, Input last, Output output);
+	inline awaiter_t<std::string> hmget(std::string_view key, Input first, Input last, Output output);
 
 	/// @brief Get values of multiple fields.
 	///
@@ -1340,7 +1368,7 @@ public:
 	///       field is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/hmget
 	template <typename T, typename Output>
-	void hmget(std::string_view key, std::initializer_list<T> il, Output output) {
+	inline awaiter_t<std::string> hmget(std::string_view key, std::initializer_list<T> il, Output output) {
 		hmget(key, il.begin(), il.end(), output);
 	}
 
@@ -1356,7 +1384,7 @@ public:
 	/// @param last Off-the-end iterator to the range.
 	/// @see https://redis.io/commands/hmset
 	template <typename Input>
-	void hmset(std::string_view key, Input first, Input last);
+	inline awaiter_t<std::string> hmset(std::string_view key, Input first, Input last);
 
 	/// @brief Set multiple field-value pairs of the given hash.
 	///
@@ -1368,7 +1396,7 @@ public:
 	/// @param il Initializer list of field-value pairs.
 	/// @see https://redis.io/commands/hmset
 	template <typename T>
-	void hmset(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<std::string> hmset(std::string_view key, std::initializer_list<T> il) {
 		hmset(key, il.begin(), il.end());
 	}
 
@@ -1448,7 +1476,7 @@ public:
 	///       If `hset` fails, it will throw an exception of `Exception` type.
 	/// @see https://github.com/sewenew/redis-plus-plus/issues/9
 	/// @see https://redis.io/commands/hset
-	bool hset(std::string_view key, std::string_view field, std::string_view val);
+	inline awaiter_t<uint64_t> hset(std::string_view key, std::string_view field, std::string_view val);
 
 	/// @brief Set hash field to value.
 	/// @param key Key where the hash is stored.
@@ -1461,7 +1489,7 @@ public:
 	///       If `hset` fails, it will throw an exception of `Exception` type.
 	/// @see https://github.com/sewenew/redis-plus-plus/issues/9
 	/// @see https://redis.io/commands/hset
-	bool hset(std::string_view key, const std::pair<StringView, StringView>& item);
+	inline awaiter_t<uint64_t> hset(std::string_view key, const std::pair<StringView, StringView>& item);
 
 	/// @brief Set multiple fields of the given hash.
 	///
@@ -1502,7 +1530,7 @@ public:
 	/// @retval true If the field has been set.
 	/// @retval false If failed to set the field, i.e. the field already exists.
 	/// @see https://redis.io/commands/hsetnx
-	bool hsetnx(std::string_view key, std::string_view field, std::string_view val);
+	inline awaiter_t<uint64_t> hsetnx(std::string_view key, std::string_view field, std::string_view val);
 
 	/// @brief Set hash field to value, only if the given field does not exist.
 	/// @param key Key where the hash is stored.
@@ -1511,7 +1539,7 @@ public:
 	/// @retval true If the field has been set.
 	/// @retval false If failed to set the field, i.e. the field already exists.
 	/// @see https://redis.io/commands/hsetnx
-	bool hsetnx(std::string_view key, const std::pair<StringView, StringView>& item);
+	inline awaiter_t<uint64_t> hsetnx(std::string_view key, const std::pair<StringView, StringView>& item);
 
 	/// @brief Get the length of the string stored at the given field.
 	/// @param key Key where the hash is stored.
@@ -1527,7 +1555,7 @@ public:
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hvals
 	template <typename Output>
-	void hvals(std::string_view key, Output output);
+	inline awaiter_t<std::string> hvals(std::string_view key, Output output);
 
 	// SET commands.
 
@@ -1572,14 +1600,14 @@ public:
 	/// @see https://redis.io/commands/sdiff
 	// TODO: `void sdiff(const StringView &key, Input first, Input last, Output output)` is better.
 	template <typename Input, typename Output>
-	void sdiff(Input first, Input last, Output output);
+	inline awaiter_t<std::string> sdiff(Input first, Input last, Output output);
 
 	/// @brief Get the difference between the first set and all successive sets.
 	/// @param il Initializer list of sets.
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/sdiff
 	template <typename T, typename Output>
-	void sdiff(std::initializer_list<T> il, Output output) {
+	inline awaiter_t<std::string> sdiff(std::initializer_list<T> il, Output output) {
 		sdiff(il.begin(), il.end(), output);
 	}
 
@@ -1619,14 +1647,14 @@ public:
 	/// @see https://redis.io/commands/sinter
 	// TODO: `void sinter(const StringView &key, Input first, Input last, Output output)` is better.
 	template <typename Input, typename Output>
-	void sinter(Input first, Input last, Output output);
+	inline awaiter_t<std::string> sinter(Input first, Input last, Output output);
 
 	/// @brief Get the intersection between the first set and all successive sets.
 	/// @param il Initializer list of sets.
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/sinter
 	template <typename T, typename Output>
-	void sinter(std::initializer_list<T> il, Output output) {
+	inline awaiter_t<std::string> sinter(std::initializer_list<T> il, Output output) {
 		sinter(il.begin(), il.end(), output);
 	}
 
@@ -1666,7 +1694,7 @@ public:
 	/// @retval true If it exists in the set.
 	/// @retval false If it does not exist in the set, or the given key does not exist.
 	/// @see https://redis.io/commands/sismember
-	bool sismember(std::string_view key, std::string_view member);
+	inline awaiter_t<uint64_t> sismember(std::string_view key, std::string_view member);
 
 	/// @brief Get all members in the given set.
 	///
@@ -1681,7 +1709,7 @@ public:
 	/// @param output Iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/smembers
 	template <typename Output>
-	void smembers(std::string_view key, Output output);
+	inline awaiter_t<std::string> smembers(std::string_view key, Output output);
 
 	/// @brief Move `member` from one set to another.
 	/// @param source Key of the set in which the member currently exists.
@@ -1690,7 +1718,7 @@ public:
 	/// @retval true If the member has been moved.
 	/// @retval false If `member` does not exist in `source`.
 	/// @see https://redis.io/commands/smove
-	bool smove(std::string_view source,
+	inline awaiter_t<uint64_t> smove(std::string_view source,
 		std::string_view destination,
 		std::string_view member);
 
@@ -1716,7 +1744,7 @@ public:
 	/// @see `Redis::srandmember`
 	/// @see https://redis.io/commands/spop
 	template <typename Output>
-	void spop(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::string> spop(std::string_view key, uint64_t count, Output output);
 
 	/// @brief Get a random member of the given set.
 	/// @param key Key where the set is stored.
@@ -1735,7 +1763,7 @@ public:
 	/// @see `Redis::spop`
 	/// @see https://redis.io/commands/srandmember
 	template <typename Output>
-	void srandmember(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::string> srandmember(std::string_view key, uint64_t count, Output output);
 
 	/// @brief Remove a member from set.
 	/// @param key Key where the set is stored.
@@ -1837,14 +1865,14 @@ public:
 	/// @see https://redis.io/commands/sunion
 	// TODO: `void sunion(const StringView &key, Input first, Input last, Output output)` is better.
 	template <typename Input, typename Output>
-	void sunion(Input first, Input last, Output output);
+	inline awaiter_t<std::string> sunion(Input first, Input last, Output output);
 
 	/// @brief Get the union between the first set and all successive sets.
 	/// @param il Initializer list of sets.
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/sunion
 	template <typename T, typename Output>
-	void sunion(std::initializer_list<T> il, Output output) {
+	inline awaiter_t<std::string> sunion(std::initializer_list<T> il, Output output) {
 		sunion(il.begin(), il.end(), output);
 	}
 
@@ -2308,7 +2336,7 @@ public:
 	/// @see `Redis::bzpopmax`
 	/// @see https://redis.io/commands/zpopmax
 	template <typename Output>
-	void zpopmax(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::string> zpopmax(std::string_view key, uint64_t count, Output output);
 
 	/// @brief Pop the member with lowest score from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2327,7 +2355,7 @@ public:
 	/// @see `Redis::bzpopmin`
 	/// @see https://redis.io/commands/zpopmin
 	template <typename Output>
-	void zpopmin(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::string> zpopmin(std::string_view key, uint64_t count, Output output);
 
 	/// @brief Get a range of members by rank (ordered from lowest to highest).
 	///
@@ -2352,7 +2380,7 @@ public:
 	/// @see `Redis::zrevrange`
 	/// @see https://redis.io/commands/zrange
 	template <typename Output>
-	void zrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
+	inline awaiter_t<std::string> zrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
 
 	/// @brief Get a range of members by lexicographical order (from lowest to highest).
 	///
@@ -2376,7 +2404,7 @@ public:
 	/// @see `Redis::zrevrangebylex`
 	/// @see https://redis.io/commands/zrangebylex
 	template <typename Interval, typename Output>
-	void zrangebylex(std::string_view key, const Interval& interval, Output output);
+	inline awaiter_t<std::string> zrangebylex(std::string_view key, const Interval& interval, Output output);
 
 	/// @brief Get a range of members by lexicographical order (from lowest to highest).
 	///
@@ -2406,7 +2434,7 @@ public:
 	/// @see `Redis::zrevrangebylex`
 	/// @see https://redis.io/commands/zrangebylex
 	template <typename Interval, typename Output>
-	void zrangebylex(std::string_view key,
+	inline awaiter_t<std::string> zrangebylex(std::string_view key,
 		const Interval& interval,
 		const LimitOptions& opts,
 		Output output);
@@ -2438,7 +2466,7 @@ public:
 	/// @see `Redis::zrevrangebyscore`
 	/// @see https://redis.io/commands/zrangebyscore
 	template <typename Interval, typename Output>
-	void zrangebyscore(std::string_view key, const Interval& interval, Output output);
+	inline awaiter_t<std::string> zrangebyscore(std::string_view key, const Interval& interval, Output output);
 
 	/// @brief Get a range of members by score (ordered from lowest to highest).
 	///
@@ -2472,7 +2500,7 @@ public:
 	/// @see `Redis::zrevrangebyscore`
 	/// @see https://redis.io/commands/zrangebyscore
 	template <typename Interval, typename Output>
-	void zrangebyscore(std::string_view key,
+	inline awaiter_t<std::string> zrangebyscore(std::string_view key,
 		const Interval& interval,
 		const LimitOptions& opts,
 		Output output);
@@ -2568,7 +2596,7 @@ public:
 	/// @see `Redis::zrange`
 	/// @see https://redis.io/commands/zrevrange
 	template <typename Output>
-	void zrevrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
+	inline awaiter_t<std::string> zrevrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
 
 	/// @brief Get a range of members by lexicographical order (from highest to lowest).
 	///
@@ -2592,7 +2620,7 @@ public:
 	/// @see `Redis::zrangebylex`
 	/// @see https://redis.io/commands/zrevrangebylex
 	template <typename Interval, typename Output>
-	void zrevrangebylex(std::string_view key, const Interval& interval, Output output);
+	inline awaiter_t<std::string> zrevrangebylex(std::string_view key, const Interval& interval, Output output);
 
 	/// @brief Get a range of members by lexicographical order (from highest to lowest).
 	///
@@ -2622,7 +2650,7 @@ public:
 	/// @see `Redis::zrangebylex`
 	/// @see https://redis.io/commands/zrevrangebylex
 	template <typename Interval, typename Output>
-	void zrevrangebylex(std::string_view key,
+	inline awaiter_t<std::string> zrevrangebylex(std::string_view key,
 		const Interval& interval,
 		const LimitOptions& opts,
 		Output output);
@@ -2654,7 +2682,7 @@ public:
 	/// @see `Redis::zrangebyscore`
 	/// @see https://redis.io/commands/zrevrangebyscore
 	template <typename Interval, typename Output>
-	void zrevrangebyscore(std::string_view key, const Interval& interval, Output output);
+	inline awaiter_t<std::string> zrevrangebyscore(std::string_view key, const Interval& interval, Output output);
 
 	/// @brief Get a range of members by score (ordered from highest to lowest).
 	///
@@ -2688,7 +2716,7 @@ public:
 	/// @see `Redis::zrangebyscore`
 	/// @see https://redis.io/commands/zrevrangebyscore
 	template <typename Interval, typename Output>
-	void zrevrangebyscore(std::string_view key,
+	inline awaiter_t<std::string> zrevrangebyscore(std::string_view key,
 		const Interval& interval,
 		const LimitOptions& opts,
 		Output output);
@@ -2872,7 +2900,7 @@ public:
 	///       an element to the hyperloglog. Instead it means that the internal registers
 	///       were not altered. If `pfadd` fails, it will throw an exception of `Exception` type.
 	/// @see https://redis.io/commands/pfadd
-	bool pfadd(std::string_view key, std::string_view element);
+	inline awaiter_t<uint64_t> pfadd(std::string_view key, std::string_view element);
 
 	/// @brief Add the given elements to a hyperloglog.
 	/// @param key Key of the hyperloglog.
@@ -2886,7 +2914,7 @@ public:
 	///       were not altered. If `pfadd` fails, it will throw an exception of `Exception` type.
 	/// @see https://redis.io/commands/pfadd
 	template <typename Input>
-	bool pfadd(std::string_view key, Input first, Input last);
+	inline awaiter_t<uint64_t> pfadd(std::string_view key, Input first, Input last);
 
 	/// @brief Add the given elements to a hyperloglog.
 	/// @param key Key of the hyperloglog.
@@ -2899,7 +2927,7 @@ public:
 	///       were not altered. If `pfadd` fails, it will throw an exception of `Exception` type.
 	/// @see https://redis.io/commands/pfadd
 	template <typename T>
-	bool pfadd(std::string_view key, std::initializer_list<T> il) {
+	inline awaiter_t<uint64_t> pfadd(std::string_view key, std::initializer_list<T> il) {
 		return pfadd(key, il.begin(), il.end());
 	}
 
