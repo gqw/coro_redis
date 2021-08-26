@@ -18,6 +18,7 @@ task<bool> coro_redis_test(event_base* base, std::string_view host, uint16_t por
 	auto conn = co_await client::get().connect(base, host, port, 50);
 	ASSERT_CO_RETURN(conn.has_value(), false, "connect to redis failed.");
 
+	co_await conn->bzpopmax({ "key", "key1", "key2" }, 0);
 	auto scan_ret = co_await conn->scan(0);
 	ASSERT_CO_RETURN(scan_ret.has_value(), false, "call scan failed.");
 	auto [cursor, keys] = *scan_ret;
@@ -34,6 +35,15 @@ task<bool> coro_redis_test(event_base* base, std::string_view host, uint16_t por
 	auto set_ret = co_await conn->set("val3", 100);
 	ASSERT_CO_RETURN(set_ret.has_value(), false, "call set failed.");
 	LOG_TRACE("set {}", *set_ret);
+
+	// co_await conn->mset("val1", "100", "val2", 100);
+	auto mset_ret = co_await conn->mset("val1", "100", "val2", "100");
+	ASSERT_CO_RETURN(mset_ret.has_value(), false, "call mset failed.");
+	LOG_TRACE("mset {}", *mset_ret);
+
+	auto mget_ret = co_await conn->mget("val1", "val3", "noexit");
+	ASSERT_CO_RETURN(mget_ret.has_value(), false, "call mget failed.");
+	LOG_TRACE("mget count: {}", mget_ret->size());
 
 	auto set_ret2 = co_await conn->set("val4", "100");
 	ASSERT_CO_RETURN(set_ret2.has_value(), false, "call set failed.");

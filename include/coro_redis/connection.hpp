@@ -11,18 +11,39 @@
 
 namespace coro_redis {
 
-	template<typename T>
-	struct is_string
-		: public std::disjunction<
-		std::is_same<char*, typename std::decay_t<T>>,
-		std::is_same<const char*, typename std::decay_t<T>>,
-		std::is_same<std::string, typename std::decay_t<T>>,
-		std::is_same<std::string_view, typename std::decay_t<T>>
-		> {
-	};
+template<typename T>
+struct is_string
+	: public std::disjunction<
+	std::is_same<char*, typename std::decay_t<T>>,
+	std::is_same<const char*, typename std::decay_t<T>>,
+	std::is_same<std::string, typename std::decay_t<T>>,
+	std::is_same<std::string_view, typename std::decay_t<T>>
+	> {
+	constexpr operator bool() const { return true; }
+};
 
 template<typename T>
 concept RedisSetValueType = std::is_integral<T>::value || is_string<T>::value;
+
+template<typename T>
+concept StringValueType = is_string<T>::value;
+
+enum class UpdateType {
+	ALWAYS,
+	EXIST,
+	NOT_EXIST,
+	LESS_THAN,
+	GREATE_THAN,
+	CHANGED,
+	INCR,
+};
+enum class RedisTTLType {
+	EX,
+	PX,
+	EXAT,
+	PXAT,
+	KEEPTTL,
+};
 
 class connection {
 public:
@@ -44,34 +65,6 @@ public:
 	/// @return Redis return.
 	template<typename CORO_RET>
 	awaiter_t<CORO_RET> command(std::string_view cmd, std::function<std::optional<CORO_RET> (redisReply*)>&& reply_op) const;
-
-	inline awaiter_t<uint64_t> incr(std::string_view key) const {
-		return command<uint64_t>(fmt::format("incr {}", key));
-	}
-
-	/// @brief Create a pipeline.
-	/// @param new_connection Whether creating a `Pipeline` object in a new connection.
-	/// @return The created pipeline.
-	/// @note Instead of picking a connection from the underlying connection pool,
-	///       this method will create a new connection to Redis. So it's not a cheap operation,
-	///       and you'd better reuse the returned object as much as possible.
-	// Pipeline pipeline(bool new_connection = true);
-
-	/// @brief Create a transaction.
-	/// @param piped Whether commands in a transaction should be sent in a pipeline to reduce RTT.
-	/// @param new_connection Whether creating a `Pipeline` object in a new connection.
-	/// @return The created transaction.
-	/// @note Instead of picking a connection from the underlying connection pool,
-	///       this method will create a new connection to Redis. So it's not a cheap operation,
-	///       and you'd better reuse the returned object as much as possible.
-	// Transaction transaction(bool piped = false, bool new_connection = true);
-
-	/// @brief Create a subscriber.
-	/// @return The created subscriber.
-	/// @note Instead of picking a connection from the underlying connection pool,
-	///       this method will create a new connection to Redis. So it's not a cheap operation,
-	///       and you'd better reuse the returned object as much as possible.
-	// Subscriber subscriber();
 
 	/// @brief Send password to Redis.
 	/// @param password Password.
@@ -620,7 +613,7 @@ public:
 	inline awaiter_t<std::string> incrbyfloat(std::string_view key, double increment) {
 		return command<std::string>(fmt::format("incrby {} {}", key, increment));
 	}
-/*
+
 	/// @brief Get the values of multiple keys atomically.
 	///
 	/// Example:
@@ -642,46 +635,12 @@ public:
 	///       since the given key might not exist (in this case, the value of the corresponding
 	///       key is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/mget
-	inline awaiter_t<std::string> mget(Input first, Input last, Output output);
-
-	/// @brief Get the values of multiple keys atomically.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// std::vector<OptionalString> vals;
-	/// redis.mget({"k1", "k2", "k3"}, std::back_inserter(vals));
-	/// for (const auto &val : vals) {
-	///     if (val)
-	///         std::cout << *val << std::endl;
-	///     else
-	///         std::cout << "key does not exist" << std::endl;
-	/// }
-	/// @endcode
-	/// @param il Initializer list of keys.
-	/// @param output Output iterator to the destination where the values are stored.
-	/// @note The destination should be a container of `OptionalString` type,
-	///       since the given key might not exist (in this case, the value of the corresponding
-	///       key is `OptionalString{}` (`std::nullopt`)).
-	/// @see https://redis.io/commands/mget
-	template <typename T, typename Output>
-	inline awaiter_t<std::string> mget(std::initializer_list<T> il, Output output) {
-		mget(il.begin(), il.end(), output);
+	template <typename ...Args>
+	inline awaiter_t<std::vector<std::string>> mget(Args&&...keys) {
+		std::string cmd("mget");
+		(cmd.append(" ").append(keys), ...);
+		return command<std::vector<std::string>>(std::move(cmd));
 	}
-
-	/// @brief Set multiple key-value pairs.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// std::vector<std::pair<std::string, std::string>> kvs1 = {{"k1", "v1"}, {"k2", "v2"}};
-	/// redis.mset(kvs1.begin(), kvs1.end());
-	/// std::unordered_map<std::string, std::string> kvs2 = {{"k3", "v3"}, {"k4", "v4"}};
-	/// redis.mset(kvs2.begin(), kvs2.end());
-	/// @endcode
-	/// @param first Iterator to the first key-value pair.
-	/// @param last Off-the-end iterator to the given range.
-	/// @see https://redis.io/commands/mset
-	template <typename Input>
-	inline awaiter_t<std::string> mset(Input first, Input last);
 
 	/// @brief Set multiple key-value pairs.
 	///
@@ -691,9 +650,12 @@ public:
 	/// @endcode
 	/// @param il Initializer list of key-value pairs.
 	/// @see https://redis.io/commands/mset
-	template <typename T>
-	inline awaiter_t<std::string> mset(std::initializer_list<T> il) {
-		mset(il.begin(), il.end());
+	template <typename ...Args>
+	// requires requires (Args&&...keys) {	((std::string_view(keys)), ...); }
+	inline awaiter_t<std::string> mset(Args&&...keys) {
+		std::string cmd("mset");
+		(cmd.append(" ").append(keys), ...);
+		return command<std::string>(std::move(cmd));
 	}
 
 	/// @brief Set the given key-value pairs if all specified keys do not exist.
@@ -711,23 +673,12 @@ public:
 	/// @retval true If all keys have been set.
 	/// @retval false If no key was set, i.e. at least one key already exist.
 	/// @see https://redis.io/commands/msetnx
-	template <typename Input>
-	inline awaiter_t<uint64_t> msetnx(Input first, Input last);
-
-	/// @brief Set the given key-value pairs if all specified keys do not exist.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// redis.msetnx({make_pair("k1", "v1"), make_pair("k2", "v2")});
-	/// @endcode
-	/// @param il Initializer list of key-value pairs.
-	/// @return Whether all keys have been set.
-	/// @retval true If all keys have been set.
-	/// @retval false If no key was set, i.e. at least one key already exist.
-	/// @see https://redis.io/commands/msetnx
-	template <typename T>
-	inline awaiter_t<uint64_t> msetnx(std::initializer_list<T> il) {
-		return msetnx(il.begin(), il.end());
+	template <typename ...Args>
+	// requires requires (Args&&...keys) {	((std::string_view(keys)), ...); }
+	inline awaiter_t<std::string> msetnx(Args&&...keys) {
+		std::string cmd("msetnx");
+		(cmd.append(" ").append(keys), ...);
+		return command<std::string>(std::move(cmd));
 	}
 
 	/// @brief Set key-value pair with the given timeout in milliseconds.
@@ -737,18 +688,9 @@ public:
 	/// @see https://redis.io/commands/psetex
 	inline awaiter_t<std::string> psetex(std::string_view key,
 		uint64_t ttl,
-		std::string_view val);
-
-	/// @brief Set key-value pair with the given timeout in milliseconds.
-	/// @param key Key.
-	/// @param ttl Time-To-Live in milliseconds.
-	/// @param val Value.
-	/// @see https://redis.io/commands/psetex
-	inline awaiter_t<std::string> psetex(std::string_view key,
-		const std::chrono::milliseconds& ttl,
-		std::string_view val);
-
-*/
+		std::string_view val) {
+		return command<std::string>(fmt::format("psetex {} {} {}", key, ttl, val));
+	}
 
 	/// @brief Set a key-value pair.
 	///
@@ -776,46 +718,14 @@ public:
 	/// @retval false If the key was not set, because of the given option.
 	/// @see https://redis.io/commands/set
 	// TODO: Support KEEPTTL option for Redis 6.0
-	enum RedisSetType {
-		EXIST,
-		NOT_EXIST,
-		ALWAYS
-	};
-	enum RedisTTLType {
-		EX,
-		PX,
-		EXAT,
-		PXAT,
-		KEEPTTL,
-	};
-
 	template<RedisSetValueType T>
 	inline awaiter_t<std::string> set(std::string_view key,
 		T val,
 		uint64_t ttl = 0,
 		RedisTTLType ttl_type = RedisTTLType::EX,
-		RedisSetType type = RedisSetType::ALWAYS) {
-		std::string cmd(fmt::format("set {} {}", key, val));
-		if (ttl > 0 && ttl_type != KEEPTTL) {
-			switch (ttl_type) {
-			case EX: cmd.append(" EX "); break;
-			case PX: cmd.append(" PX "); break;
-			case EXAT: cmd.append(" EXAT "); break;
-			case PXAT: cmd.append(" PXAT "); break;
-			}
-			cmd.append(std::to_string(ttl));
-		}
-		if (ttl_type == KEEPTTL) {
-			cmd.append(" KEEPTTL ");
-		}
-		switch (type) {
-		case EXIST: cmd.append(" XX "); break;
-		case NOT_EXIST: cmd.append(" NX "); break;
-		}
-		return command<std::string>(std::move(cmd));
-	}
+		UpdateType type = UpdateType::ALWAYS);
 
-/*
+
 	// TODO: add SETBIT command.
 
 	/// @brief Set key-value pair with the given timeout in seconds.
@@ -825,16 +735,9 @@ public:
 	/// @see https://redis.io/commands/setex
 	inline awaiter_t<std::string> setex(std::string_view key,
 		uint64_t ttl,
-		std::string_view val);
-
-	/// @brief Set key-value pair with the given timeout in seconds.
-	/// @param key Key.
-	/// @param ttl Time-To-Live in seconds.
-	/// @param val Value.
-	/// @see https://redis.io/commands/setex
-	inline awaiter_t<std::string> setex(std::string_view key,
-		const std::chrono::seconds& ttl,
-		std::string_view val);
+		std::string_view val) {
+		return command<std::string>(fmt::format("setex {} {} {}", key, ttl, val));
+	}
 
 	/// @brief Set the key if it does not exist.
 	/// @param key Key.
@@ -843,7 +746,9 @@ public:
 	/// @retval true If the key has been set.
 	/// @retval false If the key was not set, i.e. the key already exists.
 	/// @see https://redis.io/commands/setnx
-	inline awaiter_t<uint64_t> setnx(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> setnx(std::string_view key, std::string_view val) {
+		return command<uint64_t>(fmt::format("setnx {} {}", key, val));
+	}
 
 	/// @brief Set the substring starting from `offset` to the given value.
 	/// @param key Key.
@@ -851,15 +756,19 @@ public:
 	/// @param val Value.
 	/// @return The length of the string after this operation.
 	/// @see https://redis.io/commands/setrange
-	inline awaiter_t<uint64_t> setrange(std::string_view key, uint64_t offset, std::string_view val);
+	inline awaiter_t<uint64_t> setrange(std::string_view key, uint64_t offset, std::string_view val) {
+		return command<uint64_t>(fmt::format("setrange {} {} {}", key, offset, val));
+	}
 
 	/// @brief Get the length of the string stored at key.
 	/// @param key Key.
 	/// @return The length of the string.
 	/// @note If key does not exist, `strlen` returns 0.
 	/// @see https://redis.io/commands/strlen
-	inline awaiter_t<uint64_t> strlen(std::string_view key);
-
+	inline awaiter_t<uint64_t> strlen(std::string_view key) {
+		return command<uint64_t>(fmt::format("strlen {}", key));
+	}
+/*
 	// LIST commands.
 
 	/// @brief Pop the first element of the list in a blocking way.
@@ -869,7 +778,9 @@ public:
 	/// @note If list is empty and timeout reaches, return `OptionalStringPair{}` (`std::nullopt`).
 	/// @see `Redis::lpop`
 	/// @see https://redis.io/commands/blpop
-	OptionalStringPair blpop(std::string_view key, uint64_t timeout);
+	inline awaiter_t<std::vector<std::string>> blpop(std::string_view key, uint64_t timeout = 0) {
+		return command<std::vector<std::string>>(fmt::format("blpop {} {}", key, timeout));
+	}
 
 	/// @brief Pop the first element of the list in a blocking way.
 	/// @param key Key where the list is stored.
@@ -1006,7 +917,7 @@ public:
 	/// @note If the source list does not exist, `brpoplpush` returns `OptionalString{}` (`std::nullopt`).
 	/// @see `Redis::rpoplpush`
 	/// @see https://redis.io/commands/brpoplpush
-	OptionalString brpoplpush(std::string_view source,
+	inline awaiter_t<std::string> brpoplpush(std::string_view source,
 		std::string_view destination,
 		uint64_t timeout);
 
@@ -1018,7 +929,7 @@ public:
 	/// @note If the source list does not exist, `brpoplpush` returns `OptionalString{}` (`std::nullopt`).
 	/// @see `Redis::rpoplpush`
 	/// @see https://redis.io/commands/brpoplpush
-	OptionalString brpoplpush(std::string_view source,
+	inline awaiter_t<std::string> brpoplpush(std::string_view source,
 		std::string_view destination,
 		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 });
 
@@ -1027,7 +938,7 @@ public:
 	/// @param index Zero-base index, and -1 means the last element.
 	/// @return The element at the given index.
 	/// @see https://redis.io/commands/lindex
-	OptionalString lindex(std::string_view key, uint64_t index);
+	inline awaiter_t<std::string> lindex(std::string_view key, uint64_t index);
 
 	/// @brief Insert an element to a list before or after the pivot element.
 	///
@@ -1052,12 +963,15 @@ public:
 		InsertPosition position,
 		std::string_view pivot,
 		std::string_view val);
+*/
 
 	/// @brief Get the length of the list.
 	/// @param key Key where the list is stored.
 	/// @return The length of the list.
 	/// @see https://redis.io/commands/llen
-	inline awaiter_t<uint64_t> llen(std::string_view key);
+	inline awaiter_t<uint64_t> llen(std::string_view key) {
+		return command<uint64_t>(fmt::format("llen {}", key));
+	}
 
 	/// @brief Pop the first element of the list.
 	///
@@ -1073,14 +987,18 @@ public:
 	/// @return The popped element.
 	/// @note If list is empty, i.e. key does not exist, return `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/lpop
-	OptionalString lpop(std::string_view key);
+	awaiter_t<std::string> lpop(std::string_view key) {
+		return command<std::string>(fmt::format("lpop {}", key));
+	}
 
 	/// @brief Push an element to the beginning of the list.
 	/// @param key Key where the list is stored.
 	/// @param val Element to be pushed.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpush
-	inline awaiter_t<uint64_t> lpush(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> lpush(std::string_view key, std::string_view val) {
+		return command<uint64_t>(fmt::format("lpush {} {}", key, val));
+	}
 
 	/// @brief Push multiple elements to the beginning of the list.
 	///
@@ -1094,22 +1012,12 @@ public:
 	/// @param last Off-the-end iterator to the given element range.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpush
-	template <typename Input>
-	inline awaiter_t<uint64_t> lpush(std::string_view key, Input first, Input last);
-
-	/// @brief Push multiple elements to the beginning of the list.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// redis.lpush("list", {"e1", "e2", "e3"});
-	/// @endcode
-	/// @param key Key where the list is stored.
-	/// @param il Initializer list of elements.
-	/// @return The length of the list after the operation.
-	/// @see https://redis.io/commands/lpush
-	template <typename T>
-	inline awaiter_t<uint64_t> lpush(std::string_view key, std::initializer_list<T> il) {
-		return lpush(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> lpush(std::string_view key, Args&&... keys) {
+		std::string cmd("lpush ");
+		cmd.append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Push an element to the beginning of the list, only if the list already exists.
@@ -1118,7 +1026,9 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpushx
 	// TODO: add a multiple elements overload.
-	inline awaiter_t<uint64_t> lpushx(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> lpushx(std::string_view key, std::string_view val) {
+		return command<uint64_t>(fmt::format("lpushx {} {}", key, val));
+	}
 
 	/// @brief Get elements in the given range of the given list.
 	///
@@ -1133,9 +1043,9 @@ public:
 	/// @param stop End index of the range.
 	/// @param output Output iterator to the destination where the results are saved.
 	/// @see https://redis.io/commands/lrange
-	template <typename Output>
-	inline awaiter_t<std::string> lrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
-
+	inline awaiter_t<std::vector<std::string>> lrange(std::string_view key, uint64_t start, uint64_t stop) {
+		return command<std::vector<std::string>>(fmt::format("lrange {} {} {}", key, start, stop));
+	}
 	/// @brief Remove the first `count` occurrences of elements equal to `val`.
 	/// @param key Key where the list is stored.
 	/// @param count Number of occurrences to be removed.
@@ -1143,28 +1053,36 @@ public:
 	/// @return Number of elements removed.
 	/// @note `count` can be positive, negative and 0. Check the reference for detail.
 	/// @see https://redis.io/commands/lrem
-	inline awaiter_t<uint64_t> lrem(std::string_view key, uint64_t count, std::string_view val);
+	inline awaiter_t<uint64_t> lrem(std::string_view key, uint64_t count, std::string_view val) {
+		return command<uint64_t>(fmt::format("lrem {} {} {}", key, count, val));
+	}
 
 	/// @brief Set the element at the given index to the specified value.
 	/// @param key Key where the list is stored.
 	/// @param index Index of the element to be set.
 	/// @param val Value.
 	/// @see https://redis.io/commands/lset
-	inline awaiter_t<std::string> lset(std::string_view key, uint64_t index, std::string_view val);
+	inline awaiter_t<std::string> lset(std::string_view key, uint64_t index, std::string_view val) {
+		return command<std::string>(fmt::format("lset {} {} {}", key, index, val));
+	}
 
 	/// @brief Trim a list to keep only element in the given range.
 	/// @param key Key where the key is stored.
 	/// @param start Start of the index.
 	/// @param stop End of the index.
 	/// @see https://redis.io/commands/ltrim
-	inline awaiter_t<std::string> ltrim(std::string_view key, uint64_t start, uint64_t stop);
+	inline awaiter_t<std::string> ltrim(std::string_view key, uint64_t start, uint64_t stop) {
+		return command<std::string>(fmt::format("ltrim {} {} {}", key, start, stop));
+	}
 
 	/// @brief Pop the last element of a list.
 	/// @param key Key where the list is stored.
 	/// @return The popped element.
 	/// @note If the list is empty, i.e. key does not exist, `rpop` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/rpop
-	OptionalString rpop(std::string_view key);
+	inline awaiter_t<std::string> rpop(std::string_view key) {
+		return command<std::string>(fmt::format("rpop {}", key));
+	}
 
 	/// @brief Pop last element of one list and push it to the left of another list.
 	/// @param source Key of the source list.
@@ -1172,32 +1090,21 @@ public:
 	/// @return The popped element.
 	/// @note If the source list does not exist, `rpoplpush` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/brpoplpush
-	OptionalString rpoplpush(std::string_view source, std::string_view destination);
+	inline awaiter_t<std::string> rpoplpush(std::string_view source, std::string_view destination) {
+		return command<std::string>(fmt::format("rpoplpush {} {}", source, destination));
+	}
 
 	/// @brief Push an element to the end of the list.
 	/// @param key Key where the list is stored.
 	/// @param val Element to be pushed.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpush
-	inline awaiter_t<uint64_t> rpush(std::string_view key, std::string_view val);
-
-	/// @brief Push multiple elements to the end of the list.
-	/// @param key Key where the list is stored.
-	/// @param first Iterator to the first element to be pushed.
-	/// @param last Off-the-end iterator to the given element range.
-	/// @return The length of the list after the operation.
-	/// @see https://redis.io/commands/rpush
-	template <typename Input>
-	inline awaiter_t<uint64_t> rpush(std::string_view key, Input first, Input last);
-
-	/// @brief Push multiple elements to the end of the list.
-	/// @param key Key where the list is stored.
-	/// @param il Initializer list of elements to be pushed.
-	/// @return The length of the list after the operation.
-	/// @see https://redis.io/commands/rpush
-	template <typename T>
-	inline awaiter_t<uint64_t> rpush(std::string_view key, std::initializer_list<T> il) {
-		return rpush(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> rpush(std::string_view key, std::string_view val, Args&&... vals) {
+		std::string cmd("rpush ");
+		cmd.append(val);
+		(cmd.append(" ").append(vals), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Push an element to the end of the list, only if the list already exists.
@@ -1205,7 +1112,9 @@ public:
 	/// @param val Element to be pushed.
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpushx
-	inline awaiter_t<uint64_t> rpushx(std::string_view key, std::string_view val);
+	inline awaiter_t<uint64_t> rpushx(std::string_view key, std::string_view val) {
+		return command<uint64_t>(fmt::format("rpushx {} {}", key, val));
+	}
 
 	// HASH commands.
 
@@ -1216,25 +1125,12 @@ public:
 	/// @retval 1 If the field exists, and has been removed.
 	/// @retval 0 If the field does not exist.
 	/// @see https://redis.io/commands/hdel
-	inline awaiter_t<uint64_t> hdel(std::string_view key, std::string_view field);
-
-	/// @brief Remove multiple fields from hash.
-	/// @param key Key where the hash is stored.
-	/// @param first Iterator to the first field to be removed.
-	/// @param last Off-the-end iterator to the given field range.
-	/// @return Number of fields that has been removed.
-	/// @see https://redis.io/commands/hdel
-	template <typename Input>
-	inline awaiter_t<uint64_t> hdel(std::string_view key, Input first, Input last);
-
-	/// @brief Remove multiple fields from hash.
-	/// @param key Key where the hash is stored.
-	/// @param il Initializer list of fields.
-	/// @return Number of fields that has been removed.
-	/// @see https://redis.io/commands/hdel
-	template <typename T>
-	inline awaiter_t<uint64_t> hdel(std::string_view key, std::initializer_list<T> il) {
-		return hdel(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> hdel(std::string_view key, std::string_view field, Args&&... fields) {
+		std::string cmd("hdel");
+		cmd.append(" ").append(field);
+		(cmd.append(" ").append(fields), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Check if the given field exists in hash.
@@ -1244,7 +1140,9 @@ public:
 	/// @retval true If the field exists in hash.
 	/// @retval false If the field does not exist.
 	/// @see https://redis.io/commands/hexists
-	inline awaiter_t<uint64_t> hexists(std::string_view key, std::string_view field);
+	inline awaiter_t<uint64_t> hexists(std::string_view key, std::string_view field) {
+		return command<uint64_t>(fmt::format("hexists {} {}", key, field));
+	}
 
 	/// @brief Get the value of the given field.
 	/// @param key Key where the hash is stored.
@@ -1252,7 +1150,9 @@ public:
 	/// @return Value of the given field.
 	/// @note If field does not exist, `hget` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/hget
-	OptionalString hget(std::string_view key, std::string_view field);
+	inline awaiter_t<std::string> hget(std::string_view key, std::string_view field) {
+		return command<std::string>(fmt::format("hget {} {}", key, field));
+	}
 
 	/// @brief Get all field-value pairs of the given hash.
 	///
@@ -1267,8 +1167,9 @@ public:
 	/// @note It's always a bad idea to call `hgetall` on a large hash, since it will block Redis.
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hgetall
-	template <typename Output>
-	inline awaiter_t<std::string> hgetall(std::string_view key, Output output);
+	inline awaiter_t<std::vector<std::string>> hgetall(std::string_view key) {
+		return command<std::vector<std::string>>(fmt::format("hgetall {}", key));
+	}
 
 	/// @brief Increment the integer stored at the given field.
 	/// @param key Key where the hash is stored.
@@ -1276,7 +1177,9 @@ public:
 	/// @param increment Increment.
 	/// @return The value of the field after the increment.
 	/// @see https://redis.io/commands/hincrby
-	inline awaiter_t<uint64_t> hincrby(std::string_view key, std::string_view field, uint64_t increment);
+	inline awaiter_t<uint64_t> hincrby(std::string_view key, std::string_view field, uint64_t increment) {
+		return command<uint64_t>(fmt::format("hincrby {} {} {}", key, field, increment));
+	}
 
 	/// @brief Increment the floating point number stored at the given field.
 	/// @param key Key where the hash is stored.
@@ -1284,7 +1187,9 @@ public:
 	/// @param increment Increment.
 	/// @return The value of the field after the increment.
 	/// @see https://redis.io/commands/hincrbyfloat
-	double hincrbyfloat(std::string_view key, std::string_view field, double increment);
+	inline awaiter_t<double> hincrbyfloat(std::string_view key, std::string_view field, double increment) {
+		return command<double>(fmt::format("hincrbyfloat {} {} {}", key, field, increment));
+	}
 
 	/// @brief Get all fields of the given hash.
 	/// @param key Key where the hash is stored.
@@ -1292,14 +1197,17 @@ public:
 	/// @note It's always a bad idea to call `hkeys` on a large hash, since it will block Redis.
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hkeys
-	template <typename Output>
-	inline awaiter_t<std::string> hkeys(std::string_view key, Output output);
+	inline awaiter_t<std::vector<std::string>> hkeys(std::string_view key) {
+		return command<std::vector<std::string>>(fmt::format("hkeys {}", key));
+	}
 
 	/// @brief Get the number of fields of the given hash.
 	/// @param key Key where the hash is stored.
 	/// @return Number of fields.
 	/// @see https://redis.io/commands/hlen
-	inline awaiter_t<uint64_t> hlen(std::string_view key);
+	inline awaiter_t<uint64_t> hlen(std::string_view key) {
+		return command<uint64_t>(fmt::format("hlen {}", key));
+	}
 
 	/// @brief Get values of multiple fields.
 	///
@@ -1323,33 +1231,15 @@ public:
 	///       since the given field might not exist (in this case, the value of the corresponding
 	///       field is `OptionalString{}` (`std::nullopt`)).
 	/// @see https://redis.io/commands/hmget
-	template <typename Input, typename Output>
-	inline awaiter_t<std::string> hmget(std::string_view key, Input first, Input last, Output output);
-
-	/// @brief Get values of multiple fields.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// std::vector<OptionalString> vals;
-	/// redis.hmget("hash", {"f1", "f2"}, std::back_inserter(vals));
-	/// for (const auto &val : vals) {
-	///     if (val)
-	///         std::cout << *val << std::endl;
-	///     else
-	///         std::cout << "field not exist" << std::endl;
-	/// }
-	/// @endcode
-	/// @param key Key where the hash is stored.
-	/// @param il Initializer list of fields.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note The destination should be a container of `OptionalString` type,
-	///       since the given field might not exist (in this case, the value of the corresponding
-	///       field is `OptionalString{}` (`std::nullopt`)).
-	/// @see https://redis.io/commands/hmget
-	template <typename T, typename Output>
-	inline awaiter_t<std::string> hmget(std::string_view key, std::initializer_list<T> il, Output output) {
-		hmget(key, il.begin(), il.end(), output);
+	template<typename ...Args>
+	inline awaiter_t<std::vector<std::string>> hmget(std::string_view key, std::string_view field, Args&&...fields) {
+		std::string cmd("hmget ");
+		cmd.append(" ").append(key);
+		cmd.append(" ").append(field);
+		(cmd.append(" ").append(fields), ...);
+		return command<std::vector<std::string>>(std::move(cmd));
 	}
+
 
 	/// @brief Set multiple field-value pairs of the given hash.
 	///
@@ -1362,21 +1252,15 @@ public:
 	/// @param first Iterator to the first field-value pair.
 	/// @param last Off-the-end iterator to the range.
 	/// @see https://redis.io/commands/hmset
-	template <typename Input>
-	inline awaiter_t<std::string> hmset(std::string_view key, Input first, Input last);
-
-	/// @brief Set multiple field-value pairs of the given hash.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// redis.hmset("hash", {std::make_pair("f1", "v1"), std::make_pair("f2", "v2")});
-	/// @endcode
-	/// @param key Key where the hash is stored.
-	/// @param il Initializer list of field-value pairs.
-	/// @see https://redis.io/commands/hmset
-	template <typename T>
-	inline awaiter_t<std::string> hmset(std::string_view key, std::initializer_list<T> il) {
-		hmset(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<std::string> hmset(std::string_view key, std::string_view field, 
+			std::string_view value, Args&&...args) {
+		std::string cmd("hmset ");
+		cmd.append(" ").append(key);
+		cmd.append(" ").append(field);
+		cmd.append(" ").append(value);
+		(cmd.append(" ").append(args), ...);
+		return command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Scan fields of the given hash matching the given pattern.
@@ -1399,12 +1283,10 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/hscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> hscan(std::string_view key,
-		uint64_t cursor,
-		std::string_view pattern,
-		uint64_t count,
-		Output output);
+	inline awaiter_t<scan_ret_t> hscan(std::string_view key,
+		uint64_t cursor, uint64_t count) {
+		return hscan(key, cursor, "", count);
+	}
 
 	/// @brief Scan fields of the given hash matching the given pattern.
 	/// @param key Key where the hash is stored.
@@ -1413,35 +1295,10 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/hscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> hscan(std::string_view key,
+	inline awaiter_t<scan_ret_t> hscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
-		Output output);
-
-	/// @brief Scan all fields of the given hash.
-	/// @param key Key where the hash is stored.
-	/// @param cursor Cursor.
-	/// @param count A hint for how many fields to be scanned.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/hscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> hscan(std::string_view key,
-		uint64_t cursor,
-		uint64_t count,
-		Output output);
-
-	/// @brief Scan all fields of the given hash.
-	/// @param key Key where the hash is stored.
-	/// @param cursor Cursor.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/hscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> hscan(std::string_view key,
-		uint64_t cursor,
-		Output output);
+		uint64_t count = 0);
 
 	/// @brief Set hash field to value.
 	/// @param key Key where the hash is stored.
@@ -1455,20 +1312,14 @@ public:
 	///       If `hset` fails, it will throw an exception of `Exception` type.
 	/// @see https://github.com/sewenew/redis-plus-plus/issues/9
 	/// @see https://redis.io/commands/hset
-	inline awaiter_t<uint64_t> hset(std::string_view key, std::string_view field, std::string_view val);
-
-	/// @brief Set hash field to value.
-	/// @param key Key where the hash is stored.
-	/// @param item The field-value pair to be set.
-	/// @return Whether the given field is a new field.
-	/// @retval true If the given field didn't exist, and a new field has been added.
-	/// @retval false If the given field already exists, and its value has been overwritten.
-	/// @note When `hset` returns false, it does not mean that the method failed to set the field.
-	///       Instead, it means that the field already exists, and we've overwritten its value.
-	///       If `hset` fails, it will throw an exception of `Exception` type.
-	/// @see https://github.com/sewenew/redis-plus-plus/issues/9
-	/// @see https://redis.io/commands/hset
-	inline awaiter_t<uint64_t> hset(std::string_view key, const std::pair<StringView, StringView>& item);
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> hset(std::string_view key, std::string_view field, std::string_view val, Args&& ...args) {
+		std::string cmd("hset ");
+		cmd.append(" ").append(field);
+		cmd.append(" ").append(val);
+		(cmd.append(" ").append(args), ...);
+		return command<std::vector<uint64_t>>(std::move(cmd));
+	}
 
 	/// @brief Set multiple fields of the given hash.
 	///
@@ -1482,24 +1333,7 @@ public:
 	/// @param last Off-the-end iterator to the given range.
 	/// @return Number of fields that have been added, i.e. fields that not existed before.
 	/// @see https://redis.io/commands/hset
-	template <typename Input>
-	auto hset(std::string_view key, Input first, Input last)
-		-> typename std::enable_if<!std::is_convertible<Input, StringView>::value, uint64_t>::type;
-
-	/// @brief Set multiple fields of the given hash.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// redis.hset("hash", {std::make_pair("f1", "v1"), std::make_pair("f2", "v2")});
-	/// @endcode
-	/// @param key Key where the hash is stored.
-	/// @param il Initializer list of field-value pairs.
-	/// @return Number of fields that have been added, i.e. fields that not existed before.
-	/// @see https://redis.io/commands/hset
-	template <typename T>
-	inline awaiter_t<uint64_t> hset(std::string_view key, std::initializer_list<T> il) {
-		return hset(key, il.begin(), il.end());
-	}
+	inline awaiter_t<uint64_t> hset(std::string_view key, const std::vector<std::pair<std::string_view, std::string_view>>& kvs);
 
 	/// @brief Set hash field to value, only if the given field does not exist.
 	/// @param key Key where the hash is stored.
@@ -1509,23 +1343,18 @@ public:
 	/// @retval true If the field has been set.
 	/// @retval false If failed to set the field, i.e. the field already exists.
 	/// @see https://redis.io/commands/hsetnx
-	inline awaiter_t<uint64_t> hsetnx(std::string_view key, std::string_view field, std::string_view val);
-
-	/// @brief Set hash field to value, only if the given field does not exist.
-	/// @param key Key where the hash is stored.
-	/// @param item The field-value pair to be set.
-	/// @return Whether the field has been set.
-	/// @retval true If the field has been set.
-	/// @retval false If failed to set the field, i.e. the field already exists.
-	/// @see https://redis.io/commands/hsetnx
-	inline awaiter_t<uint64_t> hsetnx(std::string_view key, const std::pair<StringView, StringView>& item);
+	inline awaiter_t<uint64_t> hsetnx(std::string_view key, std::string_view field, std::string_view val) {
+		return command<uint64_t>(fmt::format("hsetnx {} {} {}", key, field, val));
+	}
 
 	/// @brief Get the length of the string stored at the given field.
 	/// @param key Key where the hash is stored.
 	/// @param field Field.
 	/// @return Length of the string.
 	/// @see https://redis.io/commands/hstrlen
-	inline awaiter_t<uint64_t> hstrlen(std::string_view key, std::string_view field);
+	inline awaiter_t<uint64_t> hstrlen(std::string_view key, std::string_view field) {
+		return command<uint64_t>(fmt::format("hstrlen {} {}", key, field));
+	}
 
 	/// @brief Get values of all fields stored at the given hash.
 	/// @param key Key where the hash is stored.
@@ -1533,8 +1362,9 @@ public:
 	/// @note It's always a bad idea to call `hvals` on a large hash, since it might block Redis.
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hvals
-	template <typename Output>
-	inline awaiter_t<std::string> hvals(std::string_view key, Output output);
+	inline awaiter_t<std::vector<std::string>> hvals(std::string_view key) {
+		return command<std::vector<std::string>>(fmt::format("hvals {}", key));
+	}
 
 	// SET commands.
 
@@ -1545,32 +1375,22 @@ public:
 	/// @retval 1 The member did not exist before, and it has been added now.
 	/// @retval 0 The member already exists before this operation.
 	/// @see https://redis.io/commands/sadd
-	inline awaiter_t<uint64_t> sadd(std::string_view key, std::string_view member);
-
-	/// @brief Add multiple members to the given set.
-	/// @param key Key where the set is stored.
-	/// @param first Iterator to the first member to be added.
-	/// @param last Off-the-end iterator to the member range.
-	/// @return Number of new members that have been added, i.e. members did not exist before.
-	/// @see https://redis.io/commands/sadd
-	template <typename Input>
-	inline awaiter_t<uint64_t> sadd(std::string_view key, Input first, Input last);
-
-	/// @brief Add multiple members to the given set.
-	/// @param key Key where the set is stored.
-	/// @param il Initializer list of members to be added.
-	/// @return Number of new members that have been added, i.e. members did not exist before.
-	/// @see https://redis.io/commands/sadd
-	template <typename T>
-	inline awaiter_t<uint64_t> sadd(std::string_view key, std::initializer_list<T> il) {
-		return sadd(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> sadd(std::string_view key, std::string_view member, Args&&... members) {
+		std::string cmd("sadd");
+		cmd.append(" ").append(key);
+		cmd.append(" ").append(member);
+		(cmd.append(" ").append(members), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Get the number of members in the set.
 	/// @param key Key where the set is stored.
 	/// @return Number of members.
 	/// @see https://redis.io/commands/scard
-	inline awaiter_t<uint64_t> scard(std::string_view key);
+	inline awaiter_t<uint64_t> scard(std::string_view key) {
+		return command<uint64_t>(fmt::format("scard {}", key));
+	}
 
 	/// @brief Get the difference between the first set and all successive sets.
 	/// @param first Iterator to the first set.
@@ -1578,16 +1398,12 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/sdiff
 	// TODO: `void sdiff(const StringView &key, Input first, Input last, Output output)` is better.
-	template <typename Input, typename Output>
-	inline awaiter_t<std::string> sdiff(Input first, Input last, Output output);
-
-	/// @brief Get the difference between the first set and all successive sets.
-	/// @param il Initializer list of sets.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @see https://redis.io/commands/sdiff
-	template <typename T, typename Output>
-	inline awaiter_t<std::string> sdiff(std::initializer_list<T> il, Output output) {
-		sdiff(il.begin(), il.end(), output);
+	template<typename ...Args>
+	inline awaiter_t<std::vector<std::string>> sdiff(std::string_view key, Args&&... keys) {
+		std::string cmd("sdiff");
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Copy set stored at `key` to `destination`.
@@ -1595,28 +1411,13 @@ public:
 	/// @param key Key of the source set.
 	/// @return Number of members of the set.
 	/// @see https://redis.io/commands/sdiffstore
-	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination, std::string_view key);
-
-	/// @brief Same as `sdiff`, except that it stores the result to another set.
-	/// @param destination Key of the destination set.
-	/// @param first Iterator to the first set.
-	/// @param last Off-the-end iterator to set range.
-	/// @return Number of members in the resulting set.
-	/// @see https://redis.io/commands/sdiffstore
-	template <typename Input>
-	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination,
-		Input first,
-		Input last);
-
-	/// @brief Same as `sdiff`, except that it stores the result to another set.
-	/// @param destination Key of the destination set.
-	/// @param il Initializer list of sets.
-	/// @return Number of members in the resulting set.
-	/// @see https://redis.io/commands/sdiffstore
-	template <typename T>
-	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination,
-		std::initializer_list<T> il) {
-		return sdiffstore(destination, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> sdiffstore(std::string_view destination, std::string_view key, Args&&... keys) {
+		std::string cmd("sdiffstore");
+		cmd.append(" ").append(destination);
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Get the intersection between the first set and all successive sets.
@@ -1625,45 +1426,27 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/sinter
 	// TODO: `void sinter(const StringView &key, Input first, Input last, Output output)` is better.
-	template <typename Input, typename Output>
-	inline awaiter_t<std::string> sinter(Input first, Input last, Output output);
-
-	/// @brief Get the intersection between the first set and all successive sets.
-	/// @param il Initializer list of sets.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @see https://redis.io/commands/sinter
-	template <typename T, typename Output>
-	inline awaiter_t<std::string> sinter(std::initializer_list<T> il, Output output) {
-		sinter(il.begin(), il.end(), output);
+	template<typename ...Args>
+	inline awaiter_t<std::vector<std::string>> sinter(std::string_view key, Args&&... keys) {
+		std::string cmd("sinter");
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
+
 
 	/// @brief Copy set stored at `key` to `destination`.
 	/// @param destination Key of the destination set.
 	/// @param key Key of the source set.
 	/// @return Number of members of the set.
 	/// @see https://redis.io/commands/sinter
-	inline awaiter_t<uint64_t> sinterstore(std::string_view destination, std::string_view key);
-
-	/// @brief Same as `sinter`, except that it stores the result to another set.
-	/// @param destination Key of the destination set.
-	/// @param first Iterator to the first set.
-	/// @param last Off-the-end iterator to set range.
-	/// @return Number of members in the resulting set.
-	/// @see https://redis.io/commands/sinter
-	template <typename Input>
-	inline awaiter_t<uint64_t> sinterstore(std::string_view destination,
-		Input first,
-		Input last);
-
-	/// @brief Same as `sinter`, except that it stores the result to another set.
-	/// @param destination Key of the destination set.
-	/// @param il Initializer list of sets.
-	/// @return Number of members in the resulting set.
-	/// @see https://redis.io/commands/sinter
-	template <typename T>
-	inline awaiter_t<uint64_t> sinterstore(std::string_view destination,
-		std::initializer_list<T> il) {
-		return sinterstore(destination, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> sinterstore(std::string_view destination, std::string_view key, Args&&... keys) {
+		std::string cmd("sinterstore");
+		cmd.append(" ").append(destination);
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Test if `member` exists in the set stored at key.
@@ -1673,7 +1456,9 @@ public:
 	/// @retval true If it exists in the set.
 	/// @retval false If it does not exist in the set, or the given key does not exist.
 	/// @see https://redis.io/commands/sismember
-	inline awaiter_t<uint64_t> sismember(std::string_view key, std::string_view member);
+	inline awaiter_t<uint64_t> sismember(std::string_view key, std::string_view member) {
+		return command<uint64_t>(fmt::format("sismember {} {}", key, member));
+	}
 
 	/// @brief Get all members in the given set.
 	///
@@ -1687,8 +1472,9 @@ public:
 	/// @param key Key where the set is stored.
 	/// @param output Iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/smembers
-	template <typename Output>
-	inline awaiter_t<std::string> smembers(std::string_view key, Output output);
+	inline awaiter_t<std::vector<std::string>> smembers(std::string_view key) {
+		return command<std::vector<std::string>>(fmt::format("smembers {}", key));
+	}
 
 	/// @brief Move `member` from one set to another.
 	/// @param source Key of the set in which the member currently exists.
@@ -1699,7 +1485,9 @@ public:
 	/// @see https://redis.io/commands/smove
 	inline awaiter_t<uint64_t> smove(std::string_view source,
 		std::string_view destination,
-		std::string_view member);
+		std::string_view member) {
+		return command<uint64_t>(fmt::format("smove {} {} {}", source, destination, member));
+	}
 
 	/// @brief Remove a random member from the set.
 	/// @param key Key where the set is stored.
@@ -1707,23 +1495,9 @@ public:
 	/// @note If the set is empty, `spop` returns `OptionalString{}` (`std::nullopt`).
 	/// @see `Redis::srandmember`
 	/// @see https://redis.io/commands/spop
-	OptionalString spop(std::string_view key);
-
-	/// @brief Remove multiple random members from the set.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// std::vector<std::string> members;
-	/// redis.spop("set", 10, std::back_inserter(members));
-	/// @endcode
-	/// @param key Key where the set is stored.
-	/// @param count Number of members to be popped.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note The number of popped members might be less than `count`.
-	/// @see `Redis::srandmember`
-	/// @see https://redis.io/commands/spop
-	template <typename Output>
-	inline awaiter_t<std::string> spop(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::vector<std::string>> spop(std::string_view key, uint64_t count = 1) {
+		return command<std::vector<std::string>>(fmt::format("spop {} {}", key, count));
+	}
 
 	/// @brief Get a random member of the given set.
 	/// @param key Key where the set is stored.
@@ -1732,7 +1506,9 @@ public:
 	/// @note This method won't remove the member from the set.
 	/// @see `Redis::spop`
 	/// @see https://redis.io/commands/srandmember
-	OptionalString srandmember(std::string_view key);
+	inline awaiter_t<std::string> srandmember(std::string_view key) {
+		return command<std::string>(fmt::format("srandmember {}", key));
+	}
 
 	/// @brief Get multiple random members of the given set.
 	/// @param key Key where the set is stored.
@@ -1741,8 +1517,9 @@ public:
 	/// @note This method won't remove members from the set.
 	/// @see `Redis::spop`
 	/// @see https://redis.io/commands/srandmember
-	template <typename Output>
-	inline awaiter_t<std::string> srandmember(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::vector<std::string>> srandmember(std::string_view key, uint64_t count) {
+		return command<std::vector<std::string>>(fmt::format("srandmember {} {}", key, count));
+	}
 
 	/// @brief Remove a member from set.
 	/// @param key Key where the set is stored.
@@ -1751,25 +1528,13 @@ public:
 	/// @retval 1 If the given member exists, and has been removed.
 	/// @retval 0 If the given member does not exist.
 	/// @see https://redis.io/commands/srem
-	inline awaiter_t<uint64_t> srem(std::string_view key, std::string_view member);
-
-	/// @brief Remove multiple members from set.
-	/// @param key Key where the set is stored.
-	/// @param first Iterator to the first member to be removed.
-	/// @param last Off-the-end iterator to the range.
-	/// @return Number of members that have been removed.
-	/// @see https://redis.io/commands/srem
-	template <typename Input>
-	inline awaiter_t<uint64_t> srem(std::string_view key, Input first, Input last);
-
-	/// @brief Remove multiple members from set.
-	/// @param key Key where the set is stored.
-	/// @param il Initializer list of members to be removed.
-	/// @return Number of members that have been removed.
-	/// @see https://redis.io/commands/srem
-	template <typename T>
-	inline awaiter_t<uint64_t> srem(std::string_view key, std::initializer_list<T> il) {
-		return srem(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> srem(std::string_view key, std::string_view member, Args&&... members) {
+		std::string cmd("srem");
+		cmd.append(" ").append(key);
+		cmd.append(" ").append(member);
+		(cmd.append(" ").append(members), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Scan members of the set matching the given pattern.
@@ -1793,49 +1558,15 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/sscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> sscan(std::string_view key,
+	inline awaiter_t<scan_ret_t> sscan(std::string_view key,
+		uint64_t cursor, uint64_t count) {
+		return sscan(key, cursor, "", count);
+	}
+
+	inline awaiter_t<scan_ret_t> sscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
-		uint64_t count,
-		Output output);
-
-	/// @brief Scan members of the set matching the given pattern.
-	/// @param key Key where the set is stored.
-	/// @param cursor Cursor.
-	/// @param pattern Pattern of fields to be scanned.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/sscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> sscan(std::string_view key,
-		uint64_t cursor,
-		std::string_view pattern,
-		Output output);
-
-	/// @brief Scan all members of the given set.
-	/// @param key Key where the set is stored.
-	/// @param cursor Cursor.
-	/// @param count A hint for how many fields to be scanned.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/sscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> sscan(std::string_view key,
-		uint64_t cursor,
-		uint64_t count,
-		Output output);
-
-	/// @brief Scan all members of the given set.
-	/// @param key Key where the set is stored.
-	/// @param cursor Cursor.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/sscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> sscan(std::string_view key,
-		uint64_t cursor,
-		Output output);
+		uint64_t count = 0);
 
 	/// @brief Get the union between the first set and all successive sets.
 	/// @param first Iterator to the first set.
@@ -1843,16 +1574,12 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/sunion
 	// TODO: `void sunion(const StringView &key, Input first, Input last, Output output)` is better.
-	template <typename Input, typename Output>
-	inline awaiter_t<std::string> sunion(Input first, Input last, Output output);
-
-	/// @brief Get the union between the first set and all successive sets.
-	/// @param il Initializer list of sets.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @see https://redis.io/commands/sunion
-	template <typename T, typename Output>
-	inline awaiter_t<std::string> sunion(std::initializer_list<T> il, Output output) {
-		sunion(il.begin(), il.end(), output);
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> sunion(std::string_view key, Args&&... keys) {
+		std::string cmd("sunion");
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Copy set stored at `key` to `destination`.
@@ -1860,25 +1587,13 @@ public:
 	/// @param key Key of the source set.
 	/// @return Number of members of the set.
 	/// @see https://redis.io/commands/sunionstore
-	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, std::string_view key);
-
-	/// @brief Same as `sunion`, except that it stores the result to another set.
-	/// @param destination Key of the destination set.
-	/// @param first Iterator to the first set.
-	/// @param last Off-the-end iterator to set range.
-	/// @return Number of members in the resulting set.
-	/// @see https://redis.io/commands/sunionstore
-	template <typename Input>
-	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, Input first, Input last);
-
-	/// @brief Same as `sunion`, except that it stores the result to another set.
-	/// @param destination Key of the destination set.
-	/// @param il Initializer list of sets.
-	/// @return Number of members in the resulting set.
-	/// @see https://redis.io/commands/sunionstore
-	template <typename T>
-	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, std::initializer_list<T> il) {
-		return sunionstore(destination, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> sunionstore(std::string_view destination, std::string_view key, Args&&... keys) {
+		std::string cmd("sunionstore");
+		cmd.append(" ").append(destination);
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(keys), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	// SORTED SET commands.
@@ -1887,80 +1602,17 @@ public:
 	/// @param key Key where the sorted set is stored.
 	/// @param timeout Timeout in seconds. 0 means block forever.
 	/// @return Key-member-score tuple with the highest score.
-	/// @note If sorted set is empty and timeout reaches, `bzpopmax` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
 	/// @see `Redis::zpopmax`
 	/// @see https://redis.io/commands/bzpopmax
-	auto bzpopmax(std::string_view key, uint64_t timeout)
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with highest score from sorted set in a blocking way.
-	/// @param key Key where the sorted set is stored.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the highest score.
-	/// @note If sorted set is empty and timeout reaches, `bzpopmax` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmax`
-	/// @see https://redis.io/commands/bzpopmax
-	auto bzpopmax(std::string_view key,
-		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 })
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with highest score from multiple sorted set in a blocking way.
-	/// @param first Iterator to the first key.
-	/// @param last Off-the-end iterator to the key range.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the higest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmax` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmax`
-	/// @see https://redis.io/commands/bzpopmax
-	template <typename Input>
-	auto bzpopmax(Input first, Input last, uint64_t timeout)
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with highest score from multiple sorted set in a blocking way.
-	/// @param first Iterator to the first key.
-	/// @param last Off-the-end iterator to the key range.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the higest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmax` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmax`
-	/// @see https://redis.io/commands/bzpopmax
-	template <typename Input>
-	auto bzpopmax(Input first,
-		Input last,
-		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 })
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with highest score from multiple sorted set in a blocking way.
-	/// @param il Initializer list of sorted sets.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the higest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmax` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmax`
-	/// @see https://redis.io/commands/bzpopmax
-	template <typename T>
-	auto bzpopmax(std::initializer_list<T> il, uint64_t timeout)
-		-> Optional<std::tuple<std::string, std::string, double>> {
-		return bzpopmax(il.begin(), il.end(), timeout);
-	}
-
-	/// @brief Pop the member with highest score from multiple sorted set in a blocking way.
-	/// @param il Initializer list of sorted sets.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the higest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmax` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmax`
-	/// @see https://redis.io/commands/bzpopmax
-	template <typename T>
-	auto bzpopmax(std::initializer_list<T> il,
-		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 })
-		-> Optional<std::tuple<std::string, std::string, double>> {
-		return bzpopmax(il.begin(), il.end(), timeout);
+	inline awaiter_t<std::vector<std::string>> bzpopmax(std::initializer_list<std::string_view> keys, uint64_t timeout = 0) {
+		if (keys.size() == 0) return {};
+		std::string cmd("bzpopmax");
+		for (const auto& key : keys)
+		{
+			cmd.append(" ").append(key);
+		}
+		cmd.append(" ").append(std::to_string(timeout));
+		return command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Pop the member with lowest score from sorted set in a blocking way.
@@ -1971,76 +1623,15 @@ public:
 	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
 	/// @see `Redis::zpopmin`
 	/// @see https://redis.io/commands/bzpopmin
-	auto bzpopmin(std::string_view key, uint64_t timeout)
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with lowest score from sorted set in a blocking way.
-	/// @param key Key where the sorted set is stored.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the lowest score.
-	/// @note If sorted set is empty and timeout reaches, `bzpopmin` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmin`
-	/// @see https://redis.io/commands/bzpopmin
-	auto bzpopmin(std::string_view key,
-		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 })
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with lowest score from multiple sorted set in a blocking way.
-	/// @param first Iterator to the first key.
-	/// @param last Off-the-end iterator to the key range.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the lowest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmin` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmin`
-	/// @see https://redis.io/commands/bzpopmin
-	template <typename Input>
-	auto bzpopmin(Input first, Input last, uint64_t timeout)
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with lowest score from multiple sorted set in a blocking way.
-	/// @param first Iterator to the first key.
-	/// @param last Off-the-end iterator to the key range.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the lowest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmin` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmin`
-	/// @see https://redis.io/commands/bzpopmin
-	template <typename Input>
-	auto bzpopmin(Input first,
-		Input last,
-		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 })
-		->Optional<std::tuple<std::string, std::string, double>>;
-
-	/// @brief Pop the member with lowest score from multiple sorted set in a blocking way.
-	/// @param il Initializer list of sorted sets.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the lowest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmin` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmin`
-	/// @see https://redis.io/commands/bzpopmin
-	template <typename T>
-	auto bzpopmin(std::initializer_list<T> il, uint64_t timeout)
-		-> Optional<std::tuple<std::string, std::string, double>> {
-		return bzpopmin(il.begin(), il.end(), timeout);
-	}
-
-	/// @brief Pop the member with lowest score from multiple sorted set in a blocking way.
-	/// @param il Initializer list of sorted sets.
-	/// @param timeout Timeout in seconds. 0 means block forever.
-	/// @return Key-member-score tuple with the lowest score.
-	/// @note If all lists are empty and timeout reaches, `bzpopmin` returns
-	///       `Optional<std::tuple<std::string, std::string, double>>{}` (`std::nullopt`).
-	/// @see `Redis::zpopmin`
-	/// @see https://redis.io/commands/bzpopmin
-	template <typename T>
-	auto bzpopmin(std::initializer_list<T> il,
-		const std::chrono::seconds& timeout = std::chrono::seconds{ 0 })
-		-> Optional<std::tuple<std::string, std::string, double>> {
-		return bzpopmin(il.begin(), il.end(), timeout);
+	inline awaiter_t<std::vector<std::string>> bzpopmin(std::initializer_list<std::string_view> keys, uint64_t timeout = 0) {
+		if (keys.size() == 0) return {};
+		std::string cmd("bzpopmin");
+		for (const auto& key : keys)
+		{
+			cmd.append(" ").append(key);
+		}
+		cmd.append(" ").append(std::to_string(timeout));
+		return command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Add or update a member with score to sorted set.
@@ -2063,8 +1654,7 @@ public:
 	inline awaiter_t<uint64_t> zadd(std::string_view key,
 		std::string_view member,
 		double score,
-		UpdateType type = UpdateType::ALWAYS,
-		bool changed = false);
+		UpdateType type = UpdateType::ALWAYS);
 
 	/// @brief Add or update multiple members with score to sorted set.
 	///
@@ -2089,12 +1679,9 @@ public:
 	///       `auto score = redis.command<OptionalDouble>("ZADD", "key", "XX", "INCR", 10, "mem");`
 	/// @see `UpdateType`
 	/// @see https://redis.io/commands/zadd
-	template <typename Input>
 	inline awaiter_t<uint64_t> zadd(std::string_view key,
-		Input first,
-		Input last,
-		UpdateType type = UpdateType::ALWAYS,
-		bool changed = false);
+		std::vector<std::pair<std::string_view,double>> kvs,
+		UpdateType type = UpdateType::ALWAYS);
 
 	/// @brief Add or update multiple members with score to sorted set.
 	///
@@ -2130,30 +1717,14 @@ public:
 	/// @param key Key where the sorted set is stored.
 	/// @return Number of members in the sorted set.
 	/// @see https://redis.io/commands/zcard
-	inline awaiter_t<uint64_t> zcard(std::string_view key);
+	inline awaiter_t<uint64_t> zcard(std::string_view key) {
+		return command<uint64_t>(fmt::format("zcard {}", key));
+	}
 
 	/// @brief Get the number of members with score between a min-max score range.
 	///
 	/// Example:
 	/// @code{.cpp}
-	/// // Count members with score between (2.3, 5]
-	/// redis.zcount("zset", BoundedInterval<double>(2.3, 5, BoundType::LEFT_OPEN));
-	/// // Count members with score between [2.3, 5)
-	/// redis.zcount("zset", BoundedInterval<double>(2.3, 5, BoundType::RIGHT_OPEN));
-	/// // Count members with score between (2.3, 5)
-	/// redis.zcount("zset", BoundedInterval<double>(2.3, 5, BoundType::OPEN));
-	/// // Count members with score between [2.3, 5]
-	/// redis.zcount("zset", BoundedInterval<double>(2.3, 5, BoundType::CLOSED));
-	/// // Count members with score between [2.3, +inf)
-	/// redis.zcount("zset", LeftBoundedInterval<double>(2.3, BoundType::RIGHT_OPEN));
-	/// // Count members with score between (2.3, +inf)
-	/// redis.zcount("zset", LeftBoundedInterval<double>(2.3, BoundType::OPEN));
-	/// // Count members with score between (-inf, 5]
-	/// redis.zcount("zset", RightBoundedInterval<double>(5, BoundType::LEFT_OPEN));
-	/// // Count members with score between (-inf, 5)
-	/// redis.zcount("zset", RightBoundedInterval<double>(5, BoundType::OPEN));
-	/// // Count members with score between (-inf, +inf)
-	/// redis.zcount("zset", UnboundedInterval<double>{});
 	/// @endcode
 	/// @param key Key where the sorted set is stored.
 	/// @param interval The min-max score range.
@@ -2164,9 +1735,10 @@ public:
 	/// @see `UnboundedInterval`
 	/// @see `BoundType`
 	/// @see https://redis.io/commands/zcount
-	// TODO: add a string version of Interval: zcount("key", "(2.3", "5").
-	template <typename Interval>
-	inline awaiter_t<uint64_t> zcount(std::string_view key, const Interval& interval);
+	// TODO: add a string version of Interval: zcount("key", "2.3", "5").
+	inline awaiter_t<uint64_t> zcount(std::string_view key, std::string_view min, std::string_view max) {
+		return command<uint64_t>(fmt::format("zcount {} {} {}", key, min, max));
+	}
 
 	/// @brief Increment the score of given member.
 	/// @param key Key where the sorted set is stored.
@@ -2174,8 +1746,10 @@ public:
 	/// @param member Member.
 	/// @return The score of the member after the operation.
 	/// @see https://redis.io/commands/zincrby
-	double zincrby(std::string_view key, double increment, std::string_view member);
-
+	double zincrby(std::string_view key, double increment, std::string_view member) {
+		return command<double>(fmt::format("zincrby {} {} {}", key, increment, member));
+	}
+/*
 	/// @brief Copy a sorted set to another one with the scores being multiplied by a factor.
 	/// @param destination Key of the destination sorted set.
 	/// @param key Key of the source sorted set.
@@ -2185,47 +1759,11 @@ public:
 	///         have the same effect.
 	/// @see `Redis::zunionstore`
 	/// @see https://redis.io/commands/zinterstore
-	inline awaiter_t<uint64_t> zinterstore(std::string_view destination, std::string_view key, double weight);
+	//inline awaiter_t<uint64_t> zinterstore(std::string_view destination, std::string_view key, double weight) {
+	//	return command<double>(fmt::format("zinterstore {} {} {}", key, increment, member));
+	//}
 
-	/// @brief Get intersection of multiple sorted sets, and store the result to another one.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// // Use the default weight, i.e. 1,
-	/// // and use the sum of the all scores as the score of the result:
-	/// std::vector<std::string> keys = {"k1", "k2", "k3"};
-	/// redis.zinterstore("destination", keys.begin(), keys.end());
-	/// // Each sorted set has a different weight,
-	/// // and the score of the result is the min of all scores.
-	/// std::vector<std::pair<std::string, double>> keys_with_weights = {{"k1", 1}, {"k2", 2}};
-	/// redis.zinterstore("destination", keys_with_weights.begin(),
-	///     keys_with_weights.end(), Aggregation::MIN);
-	/// // NOTE: `keys_with_weights` can also be of type `std::unordered_map<std::string, double>`.
-	/// // However, it will be slower than std::vector<std::pair<std::string, double>>, since we use
-	/// // `std::distance(first, last)` to calculate the *numkeys* parameter.
-	/// @endcode
-	/// @param destination Key of the destination sorted set.
-	/// @param first Iterator to the first sorted set (might with weight).
-	/// @param last Off-the-end iterator to the sorted set range.
-	/// @param type How the scores are aggregated.
-	///             - Aggregation::SUM: Score of a member is the sum of all scores.
-	///             - Aggregation::MIN: Score of a member is the min of all scores.
-	///             - Aggregation::MAX: Score of a member is the max of all scores.
-	/// @return The number of members in the resulting sorted set.
-	/// @note The score of each member can be multiplied by a factor, i.e. weight. If `Input` is an
-	///       iterator to a container of `std::string`, we use the default weight, i.e. 1, and send
-	///       *ZINTERSTORE dest numkeys key [key ...] [AGGREGATE SUM|MIN|MAX]* command.
-	///        If `Input` is an iterator to a container of `std::pair<std::string, double>`,
-	///        i.e. key-weight pair, we send the command with the given weights:
-	///       *ZINTERSTORE dest numkeys key [key ...] [WEIGHTS weight [weight ...]] [AGGREGATE SUM|MIN|MAX]*.
-	///       See the *Example* part for examples on how to use this command.
-	/// @see `Redis::zunionstore`
-	/// @see https://redis.io/commands/zinterstore
-	template <typename Input>
-	inline awaiter_t<uint64_t> zinterstore(std::string_view destination,
-		Input first,
-		Input last,
-		Aggregation type = Aggregation::SUM);
+
 
 	/// @brief Get intersection of multiple sorted sets, and store the result to another one.
 	///
@@ -2261,30 +1799,9 @@ public:
 		Aggregation type = Aggregation::SUM) {
 		return zinterstore(destination, il.begin(), il.end(), type);
 	}
-
+*/
 	/// @brief Get the number of members between a min-max range in lexicographical order.
 	///
-	/// Example:
-	/// @code{.cpp}
-	/// // Count members between (abc, abd]
-	/// redis.zlexcount("zset", BoundedInterval<std::string>("abc", "abd", BoundType::LEFT_OPEN));
-	/// // Count members between [abc, abd)
-	/// redis.zlexcount("zset", BoundedInterval<std::string>("abc", "abd", BoundType::RIGHT_OPEN));
-	/// // Count members between (abc, abd)
-	/// redis.zlexcount("zset", BoundedInterval<std::string>("abc", "abd", BoundType::OPEN));
-	/// // Count members between [abc, abd]
-	/// redis.zlexcount("zset", BoundedInterval<std::string>("abc", "abd", BoundType::CLOSED));
-	/// // Count members between [abc, +inf)
-	/// redis.zlexcount("zset", LeftBoundedInterval<std::string>("abc", BoundType::RIGHT_OPEN));
-	/// // Count members between (abc, +inf)
-	/// redis.zlexcount("zset", LeftBoundedInterval<std::string>("abc", BoundType::OPEN));
-	/// // Count members between (-inf, "abd"]
-	/// redis.zlexcount("zset", RightBoundedInterval<std::string>("abd", BoundType::LEFT_OPEN));
-	/// // Count members between (-inf, "abd")
-	/// redis.zlexcount("zset", RightBoundedInterval<std::string>("abd", BoundType::OPEN));
-	/// // Count members between (-inf, +inf)
-	/// redis.zlexcount("zset", UnboundedInterval<std::string>{});
-	/// @endcode
 	/// @param key Key where the sorted set is stored.
 	/// @param interval The min-max range in lexicographical order.
 	/// @return Number of members between a min-max range in lexicographical order.
@@ -2295,8 +1812,9 @@ public:
 	/// @see `BoundType`
 	/// @see https://redis.io/commands/zlexcount
 	// TODO: add a string version of Interval: zlexcount("key", "(abc", "abd").
-	template <typename Interval>
-	inline awaiter_t<uint64_t> zlexcount(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zlexcount(std::string_view key, std::string_view min, std::string_view max) {
+		return command<uint64_t>(fmt::format("zlexcount {} {} {}", key, min, max));
+	}
 
 	/// @brief Pop the member with highest score from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2305,17 +1823,9 @@ public:
 	///       `Optional<std::pair<std::string, double>>{}` (`std::nullopt`).
 	/// @see `Redis::bzpopmax`
 	/// @see https://redis.io/commands/zpopmax
-	Optional<std::pair<std::string, double>> zpopmax(std::string_view key);
-
-	/// @brief Pop multiple members with highest score from sorted set.
-	/// @param key Key where the sorted set is stored.
-	/// @param count Number of members to be popped.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note The number of returned members might be less than `count`.
-	/// @see `Redis::bzpopmax`
-	/// @see https://redis.io/commands/zpopmax
-	template <typename Output>
-	inline awaiter_t<std::string> zpopmax(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::vector<std::string>> zpopmax(std::string_view key, uint64_t count = 1) {
+		return command<std::vector<std::string>>(fmt::format("zpopmax {} {}", key, count));
+	}
 
 	/// @brief Pop the member with lowest score from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2324,17 +1834,9 @@ public:
 	///       `Optional<std::pair<std::string, double>>{}` (`std::nullopt`).
 	/// @see `Redis::bzpopmin`
 	/// @see https://redis.io/commands/zpopmin
-	Optional<std::pair<std::string, double>> zpopmin(std::string_view key);
-
-	/// @brief Pop multiple members with lowest score from sorted set.
-	/// @param key Key where the sorted set is stored.
-	/// @param count Number of members to be popped.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note The number of returned members might be less than `count`.
-	/// @see `Redis::bzpopmin`
-	/// @see https://redis.io/commands/zpopmin
-	template <typename Output>
-	inline awaiter_t<std::string> zpopmin(std::string_view key, uint64_t count, Output output);
+	inline awaiter_t<std::vector<std::string>> zpopmin(std::string_view key) {
+		return command<std::vector<std::string>>(fmt::format("zpopmin {} {}", key, count));
+	}
 
 	/// @brief Get a range of members by rank (ordered from lowest to highest).
 	///
@@ -2358,8 +1860,9 @@ public:
 	///       how to use this method.
 	/// @see `Redis::zrevrange`
 	/// @see https://redis.io/commands/zrange
-	template <typename Output>
-	inline awaiter_t<std::string> zrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
+	inline awaiter_t<std::vector<std::string>> zrange(std::string_view key, std::string_view min, std::string_view max) {
+		return command<std::vector<std::string>>(fmt::format("zrange {} {} {}", key, min, max));
+	}
 
 	/// @brief Get a range of members by lexicographical order (from lowest to highest).
 	///
@@ -2382,41 +1885,10 @@ public:
 	/// @see `BoundType`
 	/// @see `Redis::zrevrangebylex`
 	/// @see https://redis.io/commands/zrangebylex
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrangebylex(std::string_view key, const Interval& interval, Output output);
-
-	/// @brief Get a range of members by lexicographical order (from lowest to highest).
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// std::vector<std::string> result;
-	/// // Limit the result to at most 5 members starting from 10.
-	/// LimitOptions opts;
-	/// opts.offset = 10;
-	/// opts.count = 5;
-	/// // Get members between [abc, abd].
-	/// redis.zrangebylex("zset", BoundedInterval<std::string>("abc", "abd", BoundType::CLOSED),
-	///     opts, std::back_inserter(result));
-	/// @endcode
-	/// @param key Key where the sorted set is stored.
-	/// @param interval the min-max range by lexicographical order.
-	/// @param opts Options to do pagination, i.e. *LIMIT offset count*.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note See `Redis::zlexcount`'s *Example* part for how to set `interval` parameter.
-	/// @see `Redis::zlexcount`
-	/// @see `BoundedInterval`
-	/// @see `LeftBoundedInterval`
-	/// @see `RightBoundedInterval`
-	/// @see `UnboundedInterval`
-	/// @see `BoundType`
-	/// @see `LimitOptions`
-	/// @see `Redis::zrevrangebylex`
-	/// @see https://redis.io/commands/zrangebylex
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrangebylex(std::string_view key,
-		const Interval& interval,
-		const LimitOptions& opts,
-		Output output);
+	/// 
+	inline awaiter_t<std::vector<std::string>> zrangebylex(std::string_view key, std::string_view min, std::string_view max) {
+		return command<std::vector<std::string>>(fmt::format("zrangebylex {} {} {}", key, min, max));
+	}
 
 	/// @brief Get a range of members by score (ordered from lowest to highest).
 	///
@@ -2444,45 +1916,9 @@ public:
 	/// @note See `Redis::zcount`'s *Example* part for how to set the `interval` parameter.
 	/// @see `Redis::zrevrangebyscore`
 	/// @see https://redis.io/commands/zrangebyscore
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrangebyscore(std::string_view key, const Interval& interval, Output output);
-
-	/// @brief Get a range of members by score (ordered from lowest to highest).
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// // Send *ZRANGEBYSCORE* command without the *WITHSCORES* option:
-	/// std::vector<std::string> result;
-	/// // Only return at most 5 members starting from 10.
-	/// LimitOptions opts;
-	/// opts.offset = 10;
-	/// opts.count = 5;
-	/// // Get members whose score between (3, 6).
-	/// redis.zrangebyscore("zset", BoundedInterval<double>(3, 6, BoundType::OPEN),
-	///     opts, std::back_inserter(result));
-	/// // Send command with *WITHSCORES* option:
-	/// std::unordered_map<std::string, double> with_score;
-	/// // Get members whose score between [3, +inf).
-	/// redis.zrangebyscore("zset", LeftBoundedInterval<double>(3, BoundType::RIGHT_OPEN),
-	///     opts, std::inserter(with_score, with_score.end()));
-	/// @endcode
-	/// @param key Key where the sorted set is stored.
-	/// @param interval the min-max range by score.
-	/// @param opts Options to do pagination, i.e. *LIMIT offset count*.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note This method can also return the score of each member. If `output` is an iterator
-	///       to a container of `std::string`, we send *ZRANGEBYSCORE key min max* command.
-	///       If it's an iterator to a container of `std::pair<std::string, double>`,
-	///       we send *ZRANGEBYSCORE key min max WITHSCORES* command. See the *Example* part on
-	///       how to use this method.
-	/// @note See `Redis::zcount`'s *Example* part for how to set the `interval` parameter.
-	/// @see `Redis::zrevrangebyscore`
-	/// @see https://redis.io/commands/zrangebyscore
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrangebyscore(std::string_view key,
-		const Interval& interval,
-		const LimitOptions& opts,
-		Output output);
+	inline awaiter_t<std::vector<std::string>> zrangebyscore(std::string_view key, std::string_view min, std::string_view max) {
+		return command<std::vector<std::string>>(fmt::format("zrangebyscore {} {} {}", key, min, max));
+	}
 
 	/// @brief Get the rank (from low to high) of the given member in the sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2490,7 +1926,9 @@ public:
 	/// @return The rank of the given member.
 	/// @note If the member does not exist, `zrank` returns `OptionalLongLong{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/zrank
-	OptionalLongLong zrank(std::string_view key, std::string_view member);
+	inline awaiter_t<uint64_t> zrank(std::string_view key, std::string_view member) {
+		return command<std::vector<std::string>>(fmt::format("zrank {} {}", key, member));
+	}
 
 	/// @brief Remove the given member from sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2499,25 +1937,13 @@ public:
 	/// @retval 1 If the member exists, and has been removed.
 	/// @retval 0 If the member does not exist.
 	/// @see https://redis.io/commands/zrem
-	inline awaiter_t<uint64_t> zrem(std::string_view key, std::string_view member);
-
-	/// @brief Remove multiple members from sorted set.
-	/// @param key Key where the sorted set is stored.
-	/// @param first Iterator to the first member.
-	/// @param last Off-the-end iterator to the given range.
-	/// @return Number of members that have been removed.
-	/// @see https://redis.io/commands/zrem
-	template <typename Input>
-	inline awaiter_t<uint64_t> zrem(std::string_view key, Input first, Input last);
-
-	/// @brief Remove multiple members from sorted set.
-	/// @param key Key where the sorted set is stored.
-	/// @param il Initializer list of members to be removed.
-	/// @return Number of members that have been removed.
-	/// @see https://redis.io/commands/zrem
-	template <typename T>
-	inline awaiter_t<uint64_t> zrem(std::string_view key, std::initializer_list<T> il) {
-		return zrem(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> srem(std::string_view key, std::string_view member, Args&&... members) {
+		std::string cmd("zrem");
+		cmd.append(" ").append(key);
+		cmd.append(" ").append(member);
+		(cmd.append(" ").append(members), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Remove members in the given range of lexicographical order.
@@ -2532,8 +1958,9 @@ public:
 	/// @see `UnboundedInterval`
 	/// @see `BoundType`
 	/// @see https://redis.io/commands/zremrangebylex
-	template <typename Interval>
-	inline awaiter_t<uint64_t> zremrangebylex(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zremrangebylex(std::string_view key, std::string_view min, std::string_view max) {
+		return command<uint64_t>(fmt::format("zremrangebylex {} {} {}", key, min, max));
+	}
 
 	/// @brief Remove members in the given range ordered by rank.
 	/// @param key Key where the sorted set is stored.
@@ -2541,7 +1968,9 @@ public:
 	/// @param stop Stop rank.
 	/// @return Number of members removed.
 	/// @see https://redis.io/commands/zremrangebyrank
-	inline awaiter_t<uint64_t> zremrangebyrank(std::string_view key, uint64_t start, uint64_t stop);
+	inline awaiter_t<uint64_t> zremrangebyrank(std::string_view key, uint64_t start, uint64_t stop) {
+		return command<uint64_t>(fmt::format("zremrangebyrank {} {} {}", key, start, stop));
+	}
 
 	/// @brief Remove members in the given range ordered by score.
 	/// @param key Key where the sorted set is stored.
@@ -2549,8 +1978,9 @@ public:
 	/// @return Number of members removed.
 	/// @note See `Redis::zcount`'s *Example* part for how to set the `interval` parameter.
 	/// @see https://redis.io/commands/zremrangebyscore
-	template <typename Interval>
-	inline awaiter_t<uint64_t> zremrangebyscore(std::string_view key, const Interval& interval);
+	inline awaiter_t<uint64_t> zremrangebyscore(std::string_view key, std::string_view min, std::string_view max) {
+		return command<uint64_t>(fmt::format("zremrangebyscore {} {} {}", key, min, max));
+	}
 
 	/// @brief Get a range of members by rank (ordered from highest to lowest).
 	///
@@ -2574,8 +2004,9 @@ public:
 	///       how to use this method.
 	/// @see `Redis::zrange`
 	/// @see https://redis.io/commands/zrevrange
-	template <typename Output>
-	inline awaiter_t<std::string> zrevrange(std::string_view key, uint64_t start, uint64_t stop, Output output);
+	inline awaiter_t<std::string> zrevrange(std::string_view key, uint64_t start, uint64_t stop, bool withscores = false) {
+		return command<uint64_t>(fmt::format("zrevrange {} {} {} {}", key, start, stop, (withscores? "WITHSCORES" : "")));
+	}
 
 	/// @brief Get a range of members by lexicographical order (from highest to lowest).
 	///
@@ -2598,41 +2029,10 @@ public:
 	/// @see `BoundType`
 	/// @see `Redis::zrangebylex`
 	/// @see https://redis.io/commands/zrevrangebylex
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrevrangebylex(std::string_view key, const Interval& interval, Output output);
+	inline awaiter_t<std::string> zrevrangebylex(std::string_view key, std::string_view min, std::string_view max) {
+		return command<std::string>(fmt::format("zrevrangebylex {} {} {}", key, min, max));
+	}
 
-	/// @brief Get a range of members by lexicographical order (from highest to lowest).
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// std::vector<std::string> result;
-	/// // Limit the result to at most 5 members starting from 10.
-	/// LimitOptions opts;
-	/// opts.offset = 10;
-	/// opts.count = 5;
-	/// // Get members between [abc, abd] in reverse order.
-	/// redis.zrevrangebylex("zset", BoundedInterval<std::string>("abc", "abd", BoundType::CLOSED),
-	///     opts, std::back_inserter(result));
-	/// @endcode
-	/// @param key Key where the sorted set is stored.
-	/// @param interval the min-max range by lexicographical order.
-	/// @param opts Options to do pagination, i.e. *LIMIT offset count*.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note See `Redis::zlexcount`'s *Example* part for how to set `interval` parameter.
-	/// @see `Redis::zlexcount`
-	/// @see `BoundedInterval`
-	/// @see `LeftBoundedInterval`
-	/// @see `RightBoundedInterval`
-	/// @see `UnboundedInterval`
-	/// @see `BoundType`
-	/// @see `LimitOptions`
-	/// @see `Redis::zrangebylex`
-	/// @see https://redis.io/commands/zrevrangebylex
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrevrangebylex(std::string_view key,
-		const Interval& interval,
-		const LimitOptions& opts,
-		Output output);
 
 	/// @brief Get a range of members by score (ordered from highest to lowest).
 	///
@@ -2661,44 +2061,9 @@ public:
 	/// @see `Redis::zrangebyscore`
 	/// @see https://redis.io/commands/zrevrangebyscore
 	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrevrangebyscore(std::string_view key, const Interval& interval, Output output);
-
-	/// @brief Get a range of members by score (ordered from highest to lowest).
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// // Send *ZREVRANGEBYSCORE* command without the *WITHSCORES* option:
-	/// std::vector<std::string> result;
-	/// // Only return at most 5 members starting from 10.
-	/// LimitOptions opts;
-	/// opts.offset = 10;
-	/// opts.count = 5;
-	/// // Get members whose score between (3, 6) in reverse order.
-	/// redis.zrevrangebyscore("zset", BoundedInterval<double>(3, 6, BoundType::OPEN),
-	///     opts, std::back_inserter(result));
-	/// // Send command with *WITHSCORES* option:
-	/// std::unordered_map<std::string, double> with_score;
-	/// // Get members whose score between [3, +inf) in reverse order.
-	/// redis.zrevrangebyscore("zset", LeftBoundedInterval<double>(3, BoundType::RIGHT_OPEN),
-	///     opts, std::inserter(with_score, with_score.end()));
-	/// @endcode
-	/// @param key Key where the sorted set is stored.
-	/// @param interval the min-max range by score.
-	/// @param opts Options to do pagination, i.e. *LIMIT offset count*.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @note This method can also return the score of each member. If `output` is an iterator
-	///       to a container of `std::string`, we send *ZREVRANGEBYSCORE key min max* command.
-	///       If it's an iterator to a container of `std::pair<std::string, double>`,
-	///       we send *ZREVRANGEBYSCORE key min max WITHSCORES* command. See the *Example* part on
-	///       how to use this method.
-	/// @note See `Redis::zcount`'s *Example* part for how to set the `interval` parameter.
-	/// @see `Redis::zrangebyscore`
-	/// @see https://redis.io/commands/zrevrangebyscore
-	template <typename Interval, typename Output>
-	inline awaiter_t<std::string> zrevrangebyscore(std::string_view key,
-		const Interval& interval,
-		const LimitOptions& opts,
-		Output output);
+	inline awaiter_t<std::string> zrevrangebyscore(std::string_view key, std::string_view min, std::string_view max) {
+		return command<uint64_t>(fmt::format("zrevrangebyscore {} {} {}", key, min, max));
+	}
 
 	/// @brief Get the rank (from high to low) of the given member in the sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2706,48 +2071,9 @@ public:
 	/// @return The rank of the given member.
 	/// @note If the member does not exist, `zrevrank` returns `OptionalLongLong{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/zrevrank
-	OptionalLongLong zrevrank(std::string_view key, std::string_view member);
-
-	/// @brief Scan members of the given sorted set matching the given pattern.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// auto cursor = 0LL;
-	/// std::unordered_map<std::string, double> members;
-	/// while (true) {
-	///     cursor = redis.zscan("zset", cursor, "pattern:*",
-	///         10, std::inserter(members, members.begin()));
-	///     if (cursor == 0) {
-	///         break;
-	///     }
-	/// }
-	/// @endcode
-	/// @param key Key where the sorted set is stored.
-	/// @param cursor Cursor.
-	/// @param pattern Pattern of members to be scanned.
-	/// @param count A hint for how many members to be scanned.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/zscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> zscan(std::string_view key,
-		uint64_t cursor,
-		std::string_view pattern,
-		uint64_t count,
-		Output output);
-
-	/// @brief Scan members of the given sorted set matching the given pattern.
-	/// @param key Key where the sorted set is stored.
-	/// @param cursor Cursor.
-	/// @param pattern Pattern of members to be scanned.
-	/// @param output Output iterator to the destination where the result is saved.
-	/// @return The cursor to be used for the next scan operation.
-	/// @see https://redis.io/commands/zscan
-	template <typename Output>
-	inline awaiter_t<uint64_t> zscan(std::string_view key,
-		uint64_t cursor,
-		std::string_view pattern,
-		Output output);
+	inline awaiter_t<uint64_t> zrevrank(std::string_view key, std::string_view member) {
+		return command<std::string>(fmt::format("zrevrank {} {}", key, member));
+	}
 
 	/// @brief Scan all members of the given sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2756,11 +2082,11 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
-	template <typename Output>
 	inline awaiter_t<uint64_t> zscan(std::string_view key,
 		uint64_t cursor,
-		uint64_t count,
-		Output output);
+		uint64_t count) {
+		return zscan(key, cursor, count);
+	}
 
 	/// @brief Scan all members of the given sorted set.
 	/// @param key Key where the sorted set is stored.
@@ -2768,10 +2094,10 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
-	template <typename Output>
 	inline awaiter_t<uint64_t> zscan(std::string_view key,
 		uint64_t cursor,
-		Output output);
+		std::string_view pattern,
+		uint64_t count);
 
 	/// @brief Get the score of the given member.
 	/// @param key Key where the sorted set is stored.
@@ -2779,7 +2105,9 @@ public:
 	/// @return The score of the member.
 	/// @note If member does not exist, `zscore` returns `OptionalDouble{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/zscore
-	OptionalDouble zscore(std::string_view key, std::string_view member);
+	inline awaiter_t<double> zscore(std::string_view key, std::string_view member) {
+		return command<double>(fmt::format("zscore {} {}", key, member));
+	}
 
 	/// @brief Copy a sorted set to another one with the scores being multiplied by a factor.
 	/// @param destination Key of the destination sorted set.
@@ -2790,7 +2118,8 @@ public:
 	///         have the same effect.
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zinterstore
-	inline awaiter_t<uint64_t> zunionstore(std::string_view destination, std::string_view key, double weight);
+	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
+		std::initializer_list<std::string_view> keys, std::string_view aggregate = "SUM");
 
 	/// @brief Get union of multiple sorted sets, and store the result to another one.
 	///
@@ -2826,46 +2155,9 @@ public:
 	///       See the *Example* part for examples on how to use this command.
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zunionstore
-	template <typename Input>
+	template<typename ...Args>
 	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
-		Input first,
-		Input last,
-		Aggregation type = Aggregation::SUM);
-
-	/// @brief Get union of multiple sorted sets, and store the result to another one.
-	///
-	/// Example:
-	/// @code{.cpp}
-	/// // Use the default weight, i.e. 1,
-	/// // and use the sum of the all scores as the score of the result:
-	/// redis.zunionstore("destination", {"k1", "k2"});
-	/// // Each sorted set has a different weight,
-	/// // and the score of the result is the min of all scores.
-	/// redis.zunionstore("destination",
-	///     {std::make_pair("k1", 1), std::make_pair("k2", 2)}, Aggregation::MIN);
-	/// @endcode
-	/// @param destination Key of the destination sorted set.
-	/// @param il Initializer list of sorted set.
-	/// @param type How the scores are aggregated.
-	///             - Aggregation::SUM: Score of a member is the sum of all scores.
-	///             - Aggregation::MIN: Score of a member is the min of all scores.
-	///             - Aggregation::MAX: Score of a member is the max of all scores.
-	/// @return The number of members in the resulting sorted set.
-	/// @note The score of each member can be multiplied by a factor, i.e. weight. If `T` is
-	///       of type `std::string`, we use the default weight, i.e. 1, and send
-	///       *ZUNIONSTORE dest numkeys key [key ...] [AGGREGATE SUM|MIN|MAX]* command.
-	///       If `T` is of type `std::pair<std::string, double>`, i.e. key-weight pair,
-	///       we send the command with the given weights:
-	///       *ZUNIONSTORE dest numkeys key [key ...] [WEIGHTS weight [weight ...]] [AGGREGATE SUM|MIN|MAX]*.
-	///       See the *Example* part for examples on how to use this command.
-	/// @see `Redis::zinterstore`
-	/// @see https://redis.io/commands/zunionstore
-	template <typename T>
-	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
-		std::initializer_list<T> il,
-		Aggregation type = Aggregation::SUM) {
-		return zunionstore(destination, il.begin(), il.end(), type);
-	}
+		std::vector<std::pair<std::string_view, double>> kvs, std::string_view aggregate = "SUM");
 
 	// HYPERLOGLOG commands.
 
@@ -2879,40 +2171,17 @@ public:
 	///       an element to the hyperloglog. Instead it means that the internal registers
 	///       were not altered. If `pfadd` fails, it will throw an exception of `Exception` type.
 	/// @see https://redis.io/commands/pfadd
-	inline awaiter_t<uint64_t> pfadd(std::string_view key, std::string_view element);
-
-	/// @brief Add the given elements to a hyperloglog.
-	/// @param key Key of the hyperloglog.
-	/// @param first Iterator to the first element.
-	/// @param last Off-the-end iterator to the given range.
-	/// @return Whether any of hyperloglog's internal register has been altered.
-	/// @retval true If at least one internal register has been altered.
-	/// @retval false If none of internal registers has been altered.
-	/// @note When `pfadd` returns false, it does not mean that this method failed to add
-	///       an element to the hyperloglog. Instead it means that the internal registers
-	///       were not altered. If `pfadd` fails, it will throw an exception of `Exception` type.
-	/// @see https://redis.io/commands/pfadd
-	template <typename Input>
-	inline awaiter_t<uint64_t> pfadd(std::string_view key, Input first, Input last);
-
-	/// @brief Add the given elements to a hyperloglog.
-	/// @param key Key of the hyperloglog.
-	/// @param il Initializer list of elements to be added.
-	/// @return Whether any of hyperloglog's internal register has been altered.
-	/// @retval true If at least one internal register has been altered.
-	/// @retval false If none of internal registers has been altered.
-	/// @note When `pfadd` returns false, it does not mean that this method failed to add
-	///       an element to the hyperloglog. Instead it means that the internal registers
-	///       were not altered. If `pfadd` fails, it will throw an exception of `Exception` type.
-	/// @see https://redis.io/commands/pfadd
-	template <typename T>
-	inline awaiter_t<uint64_t> pfadd(std::string_view key, std::initializer_list<T> il) {
-		return pfadd(key, il.begin(), il.end());
+	template<typename ...Args>
+	inline awaiter_t<uint64_t> pfadd(std::string_view key, Args&&...elements) {
+		std::string cmd("pfadd");
+		cmd.append(" ").append(key);
+		(cmd.append(" ").append(elements), ...);
+		return command<uint64_t>(std::move(cmd));
 	}
 
-*/
 private:
 	connection() = default;
+	inline awaiter_t<scan_ret_t> send_scan_cmd(std::string_view cmd);
 
 private:
 	redisAsyncContext* redis_ctx_ = nullptr;                  // redis contex

@@ -28,8 +28,6 @@ public:
         return clt;
     }
 
-
-
 	awaiter_t connect(event_base* base, std::string_view host_sv, uint16_t port, long timeout_seconds = 5) {
 		return awaiter_t([base, host = std::string(host_sv), port, timeout_seconds](awaiter_t* awaiter, const coro::coroutine_handle<>&) {
 			ASSERT_RETURN(base, void(0), "event base is nullptr");
