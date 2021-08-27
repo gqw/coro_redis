@@ -20,7 +20,7 @@ else()
 endif()
 
 find_package(spdlog CONFIG REQUIRED)
-find_package(hiredis CONFIG REQUIRED)  
+find_package(hiredis CONFIG REQUIRED)
 find_package(Libevent CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} ${INCLUDE_FILES} ${UTIL_FILES} ${SOURCE_FILES})

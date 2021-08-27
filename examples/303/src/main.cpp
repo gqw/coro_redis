@@ -6,11 +6,12 @@
 // https://opensource.org/licenses/MIT
 //
 #include <future>
-#include <hiredis/adapters/libevent.h>
 
 #include <logger.hpp>
 #include <cmdline.hpp>
 #include <coro_redis/client.hpp>
+
+#include "test.h"
 
 using namespace coro_redis;
 
@@ -90,6 +91,8 @@ int main(int argc, char* argv[]) {
 	//dog.start();
 	// 创建redis连接
 	// ASSERT_RETURN(coro_redis::get().connect(base.get(), host, port), false, "redis connect failed");
+
+	test_coro_1(base.get(), host, port);
 	coro_redis_test(base.get(), host, port);
 	// libevent event reactor
 	LOG_INFO("event is run and wait exit...");

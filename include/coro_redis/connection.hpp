@@ -8,63 +8,36 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <coro_redis/connection.ipp>
 
 namespace coro_redis {
 
-template<typename T>
-struct is_string
-	: public std::disjunction<
-	std::is_same<char*, typename std::decay_t<T>>,
-	std::is_same<const char*, typename std::decay_t<T>>,
-	std::is_same<std::string, typename std::decay_t<T>>,
-	std::is_same<std::string_view, typename std::decay_t<T>>
-	> {
-	constexpr operator bool() const { return true; }
-};
-
-template<typename T>
-concept RedisSetValueType = std::is_integral<T>::value || is_string<T>::value;
-
-template<typename T>
-concept StringValueType = is_string<T>::value;
-
-enum class UpdateType {
-	ALWAYS,
-	EXIST,
-	NOT_EXIST,
-	LESS_THAN,
-	GREATE_THAN,
-	CHANGED,
-	INCR,
-};
-enum class RedisTTLType {
-	EX,
-	PX,
-	EXAT,
-	PXAT,
-	KEEPTTL,
-};
-
 class connection {
 public:
-	using cptr = std::shared_ptr<connection>;
 	template <typename CORO_RET>
 	using awaiter_t = task_awaiter<CORO_RET, redisReply*>;
 
-	connection(redisAsyncContext* actx): redis_ctx_(actx) {}
+	using scan_ret_t = std::pair<uint64_t, std::vector<std::string>>;
+	using cptr = std::shared_ptr<connection>;
+
+	connection(redisAsyncContext* actx): impl_(actx) {}
 
 	/// @brief Send redis command.
 	/// @param cmd Redis command.
 	/// @return Redis return.
 	template<typename CORO_RET = std::string>
-	awaiter_t<CORO_RET> command(std::string_view cmd) const;
+	awaiter_t<CORO_RET> command(std::string_view cmd) const {
+		return impl_.command(cmd);
+	}
 
 	/// @brief Send redis command.
 	/// @param cmd Redis command.
 	/// @param reply_op Callback for deal redis reply.
 	/// @return Redis return.
 	template<typename CORO_RET>
-	awaiter_t<CORO_RET> command(std::string_view cmd, std::function<std::optional<CORO_RET> (redisReply*)>&& reply_op) const;
+	awaiter_t<CORO_RET> command(std::string_view cmd, std::function<std::optional<CORO_RET>(redisReply*)>&& reply_op) const {
+		return impl_.command(cmd, reply_op);
+	}
 
 	/// @brief Send password to Redis.
 	/// @param password Password.
@@ -72,7 +45,7 @@ public:
 	///       Instead, you should set password with `ConnectionOptions` or URI.
 	/// @see https://redis.io/commands/auth
 	inline awaiter_t<std::string> auth(std::string_view password) {
-		return command<std::string>(fmt::format("auth {}", password));
+		return impl_.command<std::string>(fmt::format("auth {}", password));
 	}
 
 	/// @brief Send user and password to Redis.
@@ -83,7 +56,7 @@ public:
 	///       Also this overload only works with Redis 6.0 or later.
 	/// @see https://redis.io/commands/auth
 	inline awaiter_t<std::string> auth(std::string_view user, std::string_view password) {
-		return command<std::string>(fmt::format("auth {} {}", user, password));
+		return impl_.command<std::string>(fmt::format("auth {} {}", user, password));
 	}
 
 	/// @brief Ask Redis to return the given message.
@@ -91,14 +64,14 @@ public:
 	/// @return Return the given message.
 	/// @see https://redis.io/commands/echo
 	inline awaiter_t<std::string> echo(std::string_view msg) const {
-		return command<std::string>(fmt::format("echo {}", msg));
+		return impl_.command<std::string>(fmt::format("echo {}", msg));
 	}
 
 	/// @brief Test if the connection is alive.
 	/// @return Always return *PONG*.
 	/// @see https://redis.io/commands/ping
 	inline awaiter_t<std::string> ping() {
-		return command<std::string>("ping");
+		return impl_.command<std::string>("ping");
 	}
 
 	/// @brief Test if the connection is alive.
@@ -106,39 +79,28 @@ public:
 	/// @return Return the given message.
 	/// @see https://redis.io/commands/ping
 	inline awaiter_t<std::string> ping(std::string_view msg) {
-		return command<std::string>(fmt::format("ping {}", msg));
+		return impl_.command<std::string>(fmt::format("ping {}", msg));
 	}
 
-	// After sending QUIT, only the current connection will be close, while
-	// other connections in the pool is still open. This is a strange behavior.
-	// So we DO NOT support the QUIT command. If you want to quit connection to
-	// server, just destroy the Redis object.
-	//
-	// inline awaiter_t<std::string> quit();
+	/// @brief After sending QUIT, only the current connection will be close,
+	/// while other connections in the pool is still open. 
+	/// @see https://redis.io/commands/quit
+	inline awaiter_t<std::string> quit() {
+		return impl_.command<std::string>(fmt::format("quit"));
+	}
 
-	// We get a connection from the pool, and send the SELECT command to switch
-	// to a specified DB. However, when we try to send other commands to the
-	// given DB, we might get a different connection from the pool, and these
-	// commands, in fact, work on other DB. e.g.
-	//
-	// redis.select(1); // get a connection from the pool and switch to the 1th DB
-	// redis.get("key"); // might get another connection from the pool,
-	//                   // and try to get 'key' on the default DB
-	//
-	// Obviously, this is NOT what we expect. So we DO NOT support SELECT command.
-	// In order to select a DB, we can specify the DB index with the ConnectionOptions.
-	//
-	// However, since Pipeline and Transaction always send multiple commands on a
-	// single connection, these two classes have a *select* method.
-	//
-	// inline awaiter_t<std::string> select(uint64_t idx);
+	/// @brief Select the Redis logical database
+	/// @see https://redis.io/commands/select
+	inline awaiter_t<std::string> select(uint64_t idx) {
+		return impl_.command<std::string>(fmt::format("select {}", idx));
+	}
 
 	/// @brief Swap two Redis databases.
 	/// @param idx1 The index of the first database.
 	/// @param idx2 The index of the second database.
 	/// @see https://redis.io/commands/swapdb
 	inline awaiter_t<std::string> swapdb(uint64_t idx1, uint64_t idx2) {
-		return command<std::string>(fmt::format("swapdb {} {}", idx1, idx2));
+		return impl_.command<std::string>(fmt::format("swapdb {} {}", idx1, idx2));
 	}
 
 	// SERVER commands.
@@ -146,41 +108,41 @@ public:
 	/// @brief Rewrite AOF in the background.
 	/// @see https://redis.io/commands/bgrewriteaof
 	inline awaiter_t<std::string> bgrewriteaof() {
-		return command<std::string>("bgrewriteaof");
+		return impl_.command<std::string>("bgrewriteaof");
 	}
 
 	/// @brief Save database in the background.
 	/// @see https://redis.io/commands/bgsave
 	inline awaiter_t<std::string> bgsave() {
-		return command<std::string>("bgsave");
+		return impl_.command<std::string>("bgsave");
 	}
 
 	/// @brief Get the size of the currently selected database.
 	/// @return Number of keys in currently selected database.
 	/// @see https://redis.io/commands/dbsize
 	inline awaiter_t<uint64_t> dbsize() {
-		return command<uint64_t>("dbsize");
+		return impl_.command<uint64_t>("dbsize");
 	}
 
 	/// @brief Remove keys of all databases.
 	/// @param async Whether flushing databases asynchronously, i.e. without blocking the server.
 	/// @see https://redis.io/commands/flushall
 	inline awaiter_t<std::string> flushall(bool async = false) {
-		return command<std::string>(async ? "FLUSHALL ASYNC" : "FLUSHALL SYNC");
+		return impl_.command<std::string>(async ? "FLUSHALL ASYNC" : "FLUSHALL SYNC");
 	}
 
 	/// @brief Remove keys of current databases.
 	/// @param async Whether flushing databases asynchronously, i.e. without blocking the server.
 	/// @see https://redis.io/commands/flushdb
 	inline awaiter_t<std::string> flushdb(bool async = false) {
-		return command<std::string>(async ? "FLUSHDB ASYNC" : "FLUSHDB SYNC");
+		return impl_.command<std::string>(async ? "FLUSHDB ASYNC" : "FLUSHDB SYNC");
 	}
 
 	/// @brief Get the info about the server.
 	/// @return Server info.
 	/// @see https://redis.io/commands/info
 	inline awaiter_t<std::string> info() {
-		return command<std::string>("info");
+		return impl_.command<std::string>("info");
 	}
 
 	/// @brief Get the info about the server on the given section.
@@ -188,20 +150,20 @@ public:
 	/// @return Server info.
 	/// @see https://redis.io/commands/info
 	inline awaiter_t<std::string> info(std::string_view section) {
-		return command<std::string>(fmt::format("info {}", section));
+		return impl_.command<std::string>(fmt::format("info {}", section));
 	}
 
 	/// @brief Get the UNIX timestamp in seconds, at which the database was saved successfully.
 	/// @return The last saving time.
 	/// @see https://redis.io/commands/lastsave
 	inline awaiter_t<uint64_t> lastsave() {
-		return command<uint64_t>("lastsave");
+		return impl_.command<uint64_t>("lastsave");
 	}
 
 	/// @brief Save databases into RDB file **synchronously**, i.e. block the server during saving.
 	/// @see https://redis.io/commands/save
 	inline awaiter_t<std::string> save() {
-		return command<std::string>("save");
+		return impl_.command<std::string>("save");
 	}
 
 
@@ -217,7 +179,7 @@ public:
 	inline awaiter_t<uint64_t> del(Args&&... keys) {
 		std::string cmd("del");
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 
@@ -227,7 +189,7 @@ public:
 	/// @note If key does not exist, `dump` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/dump
 	inline awaiter_t<std::string> dump(std::string_view key) {
-		return command<std::string>(fmt::format("dump {}", key));
+		return impl_.command<std::string>(fmt::format("dump {}", key));
 	}
 
 	/// @brief Check if the given key exists.
@@ -240,7 +202,7 @@ public:
 	inline awaiter_t<uint64_t> exists(Args&&... keys) {
 		std::string cmd("exists");
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Set a timeout on key.
@@ -251,7 +213,7 @@ public:
 	/// @retval 0 If key does not exist.
 	/// @see https://redis.io/commands/expire
 	inline awaiter_t<uint64_t> expire(std::string_view key, uint64_t timeout) {
-		return command<uint64_t>(fmt::format("expire {} {}", key, timeout));
+		return impl_.command<uint64_t>(fmt::format("expire {} {}", key, timeout));
 	}
 
 	/// @brief Set a timeout on key, i.e. expire the key at a future time point.
@@ -262,7 +224,7 @@ public:
 	/// @retval false If key does not exist.
 	/// @see https://redis.io/commands/expireat
 	inline awaiter_t<uint64_t> expireat(std::string_view key, uint64_t timestamp) {
-		return command<uint64_t>(fmt::format("expireat {} {}", key, timestamp));
+		return impl_.command<uint64_t>(fmt::format("expireat {} {}", key, timestamp));
 	}
 
 	/// @brief Get keys matching the given pattern.
@@ -273,7 +235,7 @@ public:
 	/// @see `Redis::scan`
 	/// @see https://redis.io/commands/keys
 	//inline awaiter_t<std::vector<std::string>> keys(std::string_view pattern) {
-	//	return command<std::vector<std::string>>(fmt::format("keys {}", pattern));
+	//	return impl_.command<std::vector<std::string>>(fmt::format("keys {}", pattern));
 	//}
 
 	/// @brief Move a key to the given database.
@@ -284,7 +246,7 @@ public:
 	/// @retval false If key was not moved.
 	/// @see https://redis.io/commands/move
 	inline awaiter_t<uint64_t> move(std::string_view key, uint64_t db) {
-		return command<uint64_t>(fmt::format("move {} {}", key, db));
+		return impl_.command<uint64_t>(fmt::format("move {} {}", key, db));
 	}
 
 	/// @brief Remove timeout on key.
@@ -294,7 +256,7 @@ public:
 	/// @retval false If key does not exist, or does not have an associated timeout.
 	/// @see https://redis.io/commands/persist
 	inline awaiter_t<uint64_t> persist(std::string_view key) {
-		return command<uint64_t>(fmt::format("persist {}", key));
+		return impl_.command<uint64_t>(fmt::format("persist {}", key));
 	}
 
 	/// @brief Set a timeout on key.
@@ -305,7 +267,7 @@ public:
 	/// @retval false If key does not exist.
 	/// @see https://redis.io/commands/pexpire
 	inline awaiter_t<uint64_t> pexpire(std::string_view key, uint64_t timeout) {
-		return command<uint64_t>(fmt::format("pexpire {} {}", key, timeout));
+		return impl_.command<uint64_t>(fmt::format("pexpire {} {}", key, timeout));
 	}
 
 	/// @brief Set a timeout on key, i.e. expire the key at a future time point.
@@ -316,7 +278,7 @@ public:
 	/// @retval false If key does not exist.
 	/// @see https://redis.io/commands/pexpireat
 	inline awaiter_t<uint64_t> pexpireat(std::string_view key, uint64_t timestamp) {
-		return command<uint64_t>(fmt::format("pexpireat {} {}", key, timestamp));
+		return impl_.command<uint64_t>(fmt::format("pexpireat {} {}", key, timestamp));
 	}
 
 	/// @brief Get the TTL of a key in milliseconds.
@@ -324,7 +286,7 @@ public:
 	/// @return TTL of the key in milliseconds.
 	/// @see https://redis.io/commands/pttl
 	inline awaiter_t<uint64_t> pttl(std::string_view key) {
-		return command<uint64_t>(fmt::format("pttl {}", key));
+		return impl_.command<uint64_t>(fmt::format("pttl {}", key));
 	}
 
 	/// @brief Get a random key from current database.
@@ -332,7 +294,7 @@ public:
 	/// @note If the database is empty, `randomkey` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/randomkey
 	inline awaiter_t<std::string> randomkey() {
-		return command<std::string>("randomkey");
+		return impl_.command<std::string>("randomkey");
 	}
 
 
@@ -341,7 +303,7 @@ public:
 	/// @param newkey The new name of the key.
 	/// @see https://redis.io/commands/rename
 	inline awaiter_t<std::string> rename(std::string_view key, std::string_view newkey) {
-		return command<std::string>(fmt::format("rename {} {}", key, newkey));
+		return impl_.command<std::string>(fmt::format("rename {} {}", key, newkey));
 	}
 
 	/// @brief Rename `key` to `newkey` if `newkey` does not exist.
@@ -352,7 +314,7 @@ public:
 	/// @retval false If newkey already exists.
 	/// @see https://redis.io/commands/renamenx
 	inline awaiter_t<uint64_t> renamenx(std::string_view key, std::string_view newkey) {
-		return command<uint64_t>(fmt::format("renamenx {} {}", key, newkey));
+		return impl_.command<uint64_t>(fmt::format("renamenx {} {}", key, newkey));
 	}
 
 	/// @brief Create a key with the value obtained by `Redis::dump`.
@@ -366,7 +328,7 @@ public:
 		std::string_view val,
 		uint64_t ttl,
 		bool replace = false) {
-		return command<std::string>(fmt::format("restore {} {} {} {}", key, ttl, val, replace));
+		return impl_.command<std::string>(fmt::format("restore {} {} {} {}", key, ttl, val, replace));
 	}
 
 	// TODO: sort
@@ -375,14 +337,6 @@ public:
 	///
 	/// Example:
 	/// @code{.cpp}
-	/// auto cursor = 0LL;
-	/// std::unordered_set<std::string> keys;
-	/// while (true) {
-	///     cursor = redis.scan(cursor, "pattern:*", 10, std::inserter(keys, keys.begin()));
-	///     if (cursor == 0) {
-	///         break;
-	///     }
-	/// }
 	/// @endcode
 	/// @param cursor Cursor.
 	/// @param pattern Pattern of the keys to be scanned.
@@ -391,15 +345,16 @@ public:
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/scan
 	/// TODO: support the TYPE option for Redis 6.0.
-	using scan_ret_t = std::pair<uint64_t, std::vector<std::string>>;
 	
 	inline awaiter_t<scan_ret_t> scan(uint64_t cursor, uint64_t count = 0) {
 		return scan(cursor, "", count);
 	}
 
-	inline awaiter_t<scan_ret_t> scan(uint64_t cursor, 
-		std::string_view pattern, 
-		uint64_t count = 0);
+	inline awaiter_t<scan_ret_t> scan(uint64_t cursor,
+		std::string_view pattern,
+		uint64_t count = 0) {
+		return impl_.scan(cursor, pattern, count);
+	}
 
 
 
@@ -413,7 +368,7 @@ public:
 	inline awaiter_t<uint64_t> touch(Args&&... keys) {
 		std::string cmd("touch");
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Get the remaining Time-To-Live of a key.
@@ -426,7 +381,7 @@ public:
 	///       or if the key exists but does not have a timeout.
 	/// @see https://redis.io/commands/ttl
 	inline awaiter_t<uint64_t> ttl(std::string_view key) {
-		return command<uint64_t>(fmt::format("ttl {}", key));
+		return impl_.command<uint64_t>(fmt::format("ttl {}", key));
 	}
 
 	/// @brief Get the type of the value stored at key.
@@ -434,7 +389,7 @@ public:
 	/// @return The type of the value.
 	/// @see https://redis.io/commands/type
 	inline awaiter_t<std::string>  type(std::string_view key) {
-		return command<std::string>(fmt::format("type {}", key));
+		return impl_.command<std::string>(fmt::format("type {}", key));
 	}
 
 	/// @brief Remove the given key asynchronously, i.e. without blocking Redis.
@@ -447,7 +402,7 @@ public:
 	inline awaiter_t<uint64_t> unlink(Args&&... keys) {
 		std::string cmd("unlink");
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Wait until previous write commands are successfully replicated to at
@@ -458,7 +413,7 @@ public:
 	/// @note The return value might be less than `numslaves`, because timeout has been reached.
 	/// @see https://redis.io/commands/wait
 	inline awaiter_t<uint64_t> wait(uint64_t numslaves, uint64_t timeout) {
-		return command<uint64_t>(fmt::format("wait {} {}", numslaves, timeout));
+		return impl_.command<uint64_t>(fmt::format("wait {} {}", numslaves, timeout));
 	}
 
 
@@ -470,7 +425,7 @@ public:
 	/// @return The length of the string after the append operation.
 	/// @see https://redis.io/commands/append
 	inline awaiter_t<uint64_t> append(std::string_view key, std::string_view str) {
-		return command<uint64_t>(fmt::format("append {} {}", key, str));
+		return impl_.command<uint64_t>(fmt::format("append {} {}", key, str));
 	}
 
 	/// @brief Get the number of bits that have been set for the given range of the string.
@@ -481,7 +436,7 @@ public:
 	/// @note The index can be negative to index from the end of the string.
 	/// @see https://redis.io/commands/bitcount
 	inline awaiter_t<uint64_t> bitcount(std::string_view key, uint64_t start = 0, uint64_t end = -1) {
-		return command<uint64_t>(fmt::format("bitcount {} {} {}", key, start, end));
+		return impl_.command<uint64_t>(fmt::format("bitcount {} {} {}", key, start, end));
 	}
 
 	enum BitOp {
@@ -504,7 +459,7 @@ public:
 		case BitOp::NOT: cmd.append(" NOT "); break;
 		}
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 
@@ -519,7 +474,7 @@ public:
 		uint64_t bit,
 		uint64_t start = 0,
 		uint64_t end = -1) {
-		return command<uint64_t>(fmt::format("bitpos {} {} {} {}", key, bit, start, end));
+		return impl_.command<uint64_t>(fmt::format("bitpos {} {} {} {}", key, bit, start, end));
 	}
 
 	/// @brief Decrement the integer stored at key by 1.
@@ -527,7 +482,7 @@ public:
 	/// @return The value after the decrement.
 	/// @see https://redis.io/commands/decr
 	inline awaiter_t<uint64_t> decr(std::string_view key) {
-		return command<uint64_t>(fmt::format("decr {}", key));
+		return impl_.command<uint64_t>(fmt::format("decr {}", key));
 	}
 
 	/// @brief Decrement the integer stored at key by `decrement`.
@@ -536,7 +491,7 @@ public:
 	/// @return The value after the decrement.
 	/// @see https://redis.io/commands/decrby
 	inline awaiter_t<uint64_t> decrby(std::string_view key, uint64_t decrement) {
-		return command<uint64_t>(fmt::format("decrby {} {}", key, decrement));
+		return impl_.command<uint64_t>(fmt::format("decrby {} {}", key, decrement));
 	}
 
 
@@ -555,7 +510,7 @@ public:
 	/// @note If key does not exist, `get` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/get
 	inline awaiter_t<std::string> get(std::string_view key) const {
-		return command<std::string>(fmt::format("get {}", key));
+		return impl_.command<std::string>(fmt::format("get {}", key));
 	}
 
 	/// @brief Get the bit value at offset in the string.
@@ -564,7 +519,7 @@ public:
 	/// @return The bit value.
 	/// @see https://redis.io/commands/getbit
 	inline awaiter_t<uint64_t> getbit(std::string_view key, uint64_t offset) {
-		return command<uint64_t>(fmt::format("getbit {} {}", key, offset));
+		return impl_.command<uint64_t>(fmt::format("getbit {} {}", key, offset));
 	}
 
 	/// @brief Get the substring of the string stored at key.
@@ -574,7 +529,7 @@ public:
 	/// @return The substring in range [start, end]. If key does not exist, return an empty string.
 	/// @see https://redis.io/commands/getrange
 	inline awaiter_t<std::string> getrange(std::string_view key, uint64_t start, uint64_t end) {
-		return command<std::string>(fmt::format("getrange {} {} {}", key, start, end));
+		return impl_.command<std::string>(fmt::format("getrange {} {} {}", key, start, end));
 	}
 
 	/// @brief Atomically set the string stored at `key` to `val`, and return the old value.
@@ -585,7 +540,7 @@ public:
 	/// @see https://redis.io/commands/getset
 	/// @see `OptionalString`
 	inline awaiter_t<std::string> getset(std::string_view key, std::string_view val) {
-		return command<std::string>(fmt::format("getset {} {}", key, val));
+		return impl_.command<std::string>(fmt::format("getset {} {}", key, val));
 	}
 
 	/// @brief Increment the integer stored at key by 1.
@@ -593,7 +548,7 @@ public:
 	/// @return The value after the increment.
 	/// @see https://redis.io/commands/incr
 	inline awaiter_t<uint64_t> incr(std::string_view key) {
-		return command<uint64_t>(fmt::format("incr {}", key));
+		return impl_.command<uint64_t>(fmt::format("incr {}", key));
 	}
 
 	/// @brief Increment the integer stored at key by `increment`.
@@ -602,7 +557,7 @@ public:
 	/// @return The value after the increment.
 	/// @see https://redis.io/commands/incrby
 	inline awaiter_t<uint64_t> incrby(std::string_view key, uint64_t increment) {
-		return command<uint64_t>(fmt::format("incrby {} {}", key, increment));
+		return impl_.command<uint64_t>(fmt::format("incrby {} {}", key, increment));
 	}
 
 	/// @brief Increment the floating point number stored at key by `increment`.
@@ -611,7 +566,7 @@ public:
 	/// @return The value after the increment.
 	/// @see https://redis.io/commands/incrbyfloat
 	inline awaiter_t<std::string> incrbyfloat(std::string_view key, double increment) {
-		return command<std::string>(fmt::format("incrby {} {}", key, increment));
+		return impl_.command<std::string>(fmt::format("incrby {} {}", key, increment));
 	}
 
 	/// @brief Get the values of multiple keys atomically.
@@ -639,7 +594,7 @@ public:
 	inline awaiter_t<std::vector<std::string>> mget(Args&&...keys) {
 		std::string cmd("mget");
 		(cmd.append(" ").append(keys), ...);
-		return command<std::vector<std::string>>(std::move(cmd));
+		return impl_.command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Set multiple key-value pairs.
@@ -655,7 +610,7 @@ public:
 	inline awaiter_t<std::string> mset(Args&&...keys) {
 		std::string cmd("mset");
 		(cmd.append(" ").append(keys), ...);
-		return command<std::string>(std::move(cmd));
+		return impl_.command<std::string>(std::move(cmd));
 	}
 
 	/// @brief Set the given key-value pairs if all specified keys do not exist.
@@ -678,7 +633,7 @@ public:
 	inline awaiter_t<std::string> msetnx(Args&&...keys) {
 		std::string cmd("msetnx");
 		(cmd.append(" ").append(keys), ...);
-		return command<std::string>(std::move(cmd));
+		return impl_.command<std::string>(std::move(cmd));
 	}
 
 	/// @brief Set key-value pair with the given timeout in milliseconds.
@@ -689,7 +644,7 @@ public:
 	inline awaiter_t<std::string> psetex(std::string_view key,
 		uint64_t ttl,
 		std::string_view val) {
-		return command<std::string>(fmt::format("psetex {} {} {}", key, ttl, val));
+		return impl_.command<std::string>(fmt::format("psetex {} {} {}", key, ttl, val));
 	}
 
 	/// @brief Set a key-value pair.
@@ -723,7 +678,9 @@ public:
 		T val,
 		uint64_t ttl = 0,
 		RedisTTLType ttl_type = RedisTTLType::EX,
-		UpdateType type = UpdateType::ALWAYS);
+		UpdateType type = UpdateType::ALWAYS) {
+		return impl_.set(key, val, ttl, ttl_type, type);
+	}
 
 
 	// TODO: add SETBIT command.
@@ -736,7 +693,7 @@ public:
 	inline awaiter_t<std::string> setex(std::string_view key,
 		uint64_t ttl,
 		std::string_view val) {
-		return command<std::string>(fmt::format("setex {} {} {}", key, ttl, val));
+		return impl_.command<std::string>(fmt::format("setex {} {} {}", key, ttl, val));
 	}
 
 	/// @brief Set the key if it does not exist.
@@ -747,7 +704,7 @@ public:
 	/// @retval false If the key was not set, i.e. the key already exists.
 	/// @see https://redis.io/commands/setnx
 	inline awaiter_t<uint64_t> setnx(std::string_view key, std::string_view val) {
-		return command<uint64_t>(fmt::format("setnx {} {}", key, val));
+		return impl_.command<uint64_t>(fmt::format("setnx {} {}", key, val));
 	}
 
 	/// @brief Set the substring starting from `offset` to the given value.
@@ -757,7 +714,7 @@ public:
 	/// @return The length of the string after this operation.
 	/// @see https://redis.io/commands/setrange
 	inline awaiter_t<uint64_t> setrange(std::string_view key, uint64_t offset, std::string_view val) {
-		return command<uint64_t>(fmt::format("setrange {} {} {}", key, offset, val));
+		return impl_.command<uint64_t>(fmt::format("setrange {} {} {}", key, offset, val));
 	}
 
 	/// @brief Get the length of the string stored at key.
@@ -766,7 +723,7 @@ public:
 	/// @note If key does not exist, `strlen` returns 0.
 	/// @see https://redis.io/commands/strlen
 	inline awaiter_t<uint64_t> strlen(std::string_view key) {
-		return command<uint64_t>(fmt::format("strlen {}", key));
+		return impl_.command<uint64_t>(fmt::format("strlen {}", key));
 	}
 /*
 	// LIST commands.
@@ -779,7 +736,7 @@ public:
 	/// @see `Redis::lpop`
 	/// @see https://redis.io/commands/blpop
 	inline awaiter_t<std::vector<std::string>> blpop(std::string_view key, uint64_t timeout = 0) {
-		return command<std::vector<std::string>>(fmt::format("blpop {} {}", key, timeout));
+		return impl_.command<std::vector<std::string>>(fmt::format("blpop {} {}", key, timeout));
 	}
 
 	/// @brief Pop the first element of the list in a blocking way.
@@ -970,7 +927,7 @@ public:
 	/// @return The length of the list.
 	/// @see https://redis.io/commands/llen
 	inline awaiter_t<uint64_t> llen(std::string_view key) {
-		return command<uint64_t>(fmt::format("llen {}", key));
+		return impl_.command<uint64_t>(fmt::format("llen {}", key));
 	}
 
 	/// @brief Pop the first element of the list.
@@ -988,7 +945,7 @@ public:
 	/// @note If list is empty, i.e. key does not exist, return `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/lpop
 	awaiter_t<std::string> lpop(std::string_view key) {
-		return command<std::string>(fmt::format("lpop {}", key));
+		return impl_.command<std::string>(fmt::format("lpop {}", key));
 	}
 
 	/// @brief Push an element to the beginning of the list.
@@ -997,7 +954,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/lpush
 	inline awaiter_t<uint64_t> lpush(std::string_view key, std::string_view val) {
-		return command<uint64_t>(fmt::format("lpush {} {}", key, val));
+		return impl_.command<uint64_t>(fmt::format("lpush {} {}", key, val));
 	}
 
 	/// @brief Push multiple elements to the beginning of the list.
@@ -1017,7 +974,7 @@ public:
 		std::string cmd("lpush ");
 		cmd.append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Push an element to the beginning of the list, only if the list already exists.
@@ -1027,7 +984,7 @@ public:
 	/// @see https://redis.io/commands/lpushx
 	// TODO: add a multiple elements overload.
 	inline awaiter_t<uint64_t> lpushx(std::string_view key, std::string_view val) {
-		return command<uint64_t>(fmt::format("lpushx {} {}", key, val));
+		return impl_.command<uint64_t>(fmt::format("lpushx {} {}", key, val));
 	}
 
 	/// @brief Get elements in the given range of the given list.
@@ -1044,7 +1001,7 @@ public:
 	/// @param output Output iterator to the destination where the results are saved.
 	/// @see https://redis.io/commands/lrange
 	inline awaiter_t<std::vector<std::string>> lrange(std::string_view key, uint64_t start, uint64_t stop) {
-		return command<std::vector<std::string>>(fmt::format("lrange {} {} {}", key, start, stop));
+		return impl_.command<std::vector<std::string>>(fmt::format("lrange {} {} {}", key, start, stop));
 	}
 	/// @brief Remove the first `count` occurrences of elements equal to `val`.
 	/// @param key Key where the list is stored.
@@ -1054,7 +1011,7 @@ public:
 	/// @note `count` can be positive, negative and 0. Check the reference for detail.
 	/// @see https://redis.io/commands/lrem
 	inline awaiter_t<uint64_t> lrem(std::string_view key, uint64_t count, std::string_view val) {
-		return command<uint64_t>(fmt::format("lrem {} {} {}", key, count, val));
+		return impl_.command<uint64_t>(fmt::format("lrem {} {} {}", key, count, val));
 	}
 
 	/// @brief Set the element at the given index to the specified value.
@@ -1063,7 +1020,7 @@ public:
 	/// @param val Value.
 	/// @see https://redis.io/commands/lset
 	inline awaiter_t<std::string> lset(std::string_view key, uint64_t index, std::string_view val) {
-		return command<std::string>(fmt::format("lset {} {} {}", key, index, val));
+		return impl_.command<std::string>(fmt::format("lset {} {} {}", key, index, val));
 	}
 
 	/// @brief Trim a list to keep only element in the given range.
@@ -1072,7 +1029,7 @@ public:
 	/// @param stop End of the index.
 	/// @see https://redis.io/commands/ltrim
 	inline awaiter_t<std::string> ltrim(std::string_view key, uint64_t start, uint64_t stop) {
-		return command<std::string>(fmt::format("ltrim {} {} {}", key, start, stop));
+		return impl_.command<std::string>(fmt::format("ltrim {} {} {}", key, start, stop));
 	}
 
 	/// @brief Pop the last element of a list.
@@ -1081,7 +1038,7 @@ public:
 	/// @note If the list is empty, i.e. key does not exist, `rpop` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/rpop
 	inline awaiter_t<std::string> rpop(std::string_view key) {
-		return command<std::string>(fmt::format("rpop {}", key));
+		return impl_.command<std::string>(fmt::format("rpop {}", key));
 	}
 
 	/// @brief Pop last element of one list and push it to the left of another list.
@@ -1091,7 +1048,7 @@ public:
 	/// @note If the source list does not exist, `rpoplpush` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/brpoplpush
 	inline awaiter_t<std::string> rpoplpush(std::string_view source, std::string_view destination) {
-		return command<std::string>(fmt::format("rpoplpush {} {}", source, destination));
+		return impl_.command<std::string>(fmt::format("rpoplpush {} {}", source, destination));
 	}
 
 	/// @brief Push an element to the end of the list.
@@ -1104,7 +1061,7 @@ public:
 		std::string cmd("rpush ");
 		cmd.append(val);
 		(cmd.append(" ").append(vals), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Push an element to the end of the list, only if the list already exists.
@@ -1113,7 +1070,7 @@ public:
 	/// @return The length of the list after the operation.
 	/// @see https://redis.io/commands/rpushx
 	inline awaiter_t<uint64_t> rpushx(std::string_view key, std::string_view val) {
-		return command<uint64_t>(fmt::format("rpushx {} {}", key, val));
+		return impl_.command<uint64_t>(fmt::format("rpushx {} {}", key, val));
 	}
 
 	// HASH commands.
@@ -1130,7 +1087,7 @@ public:
 		std::string cmd("hdel");
 		cmd.append(" ").append(field);
 		(cmd.append(" ").append(fields), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Check if the given field exists in hash.
@@ -1141,7 +1098,7 @@ public:
 	/// @retval false If the field does not exist.
 	/// @see https://redis.io/commands/hexists
 	inline awaiter_t<uint64_t> hexists(std::string_view key, std::string_view field) {
-		return command<uint64_t>(fmt::format("hexists {} {}", key, field));
+		return impl_.command<uint64_t>(fmt::format("hexists {} {}", key, field));
 	}
 
 	/// @brief Get the value of the given field.
@@ -1151,7 +1108,7 @@ public:
 	/// @note If field does not exist, `hget` returns `OptionalString{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/hget
 	inline awaiter_t<std::string> hget(std::string_view key, std::string_view field) {
-		return command<std::string>(fmt::format("hget {} {}", key, field));
+		return impl_.command<std::string>(fmt::format("hget {} {}", key, field));
 	}
 
 	/// @brief Get all field-value pairs of the given hash.
@@ -1168,7 +1125,7 @@ public:
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hgetall
 	inline awaiter_t<std::vector<std::string>> hgetall(std::string_view key) {
-		return command<std::vector<std::string>>(fmt::format("hgetall {}", key));
+		return impl_.command<std::vector<std::string>>(fmt::format("hgetall {}", key));
 	}
 
 	/// @brief Increment the integer stored at the given field.
@@ -1178,7 +1135,7 @@ public:
 	/// @return The value of the field after the increment.
 	/// @see https://redis.io/commands/hincrby
 	inline awaiter_t<uint64_t> hincrby(std::string_view key, std::string_view field, uint64_t increment) {
-		return command<uint64_t>(fmt::format("hincrby {} {} {}", key, field, increment));
+		return impl_.command<uint64_t>(fmt::format("hincrby {} {} {}", key, field, increment));
 	}
 
 	/// @brief Increment the floating point number stored at the given field.
@@ -1188,7 +1145,7 @@ public:
 	/// @return The value of the field after the increment.
 	/// @see https://redis.io/commands/hincrbyfloat
 	inline awaiter_t<double> hincrbyfloat(std::string_view key, std::string_view field, double increment) {
-		return command<double>(fmt::format("hincrbyfloat {} {} {}", key, field, increment));
+		return impl_.command<double>(fmt::format("hincrbyfloat {} {} {}", key, field, increment));
 	}
 
 	/// @brief Get all fields of the given hash.
@@ -1198,7 +1155,7 @@ public:
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hkeys
 	inline awaiter_t<std::vector<std::string>> hkeys(std::string_view key) {
-		return command<std::vector<std::string>>(fmt::format("hkeys {}", key));
+		return impl_.command<std::vector<std::string>>(fmt::format("hkeys {}", key));
 	}
 
 	/// @brief Get the number of fields of the given hash.
@@ -1206,7 +1163,7 @@ public:
 	/// @return Number of fields.
 	/// @see https://redis.io/commands/hlen
 	inline awaiter_t<uint64_t> hlen(std::string_view key) {
-		return command<uint64_t>(fmt::format("hlen {}", key));
+		return impl_.command<uint64_t>(fmt::format("hlen {}", key));
 	}
 
 	/// @brief Get values of multiple fields.
@@ -1237,7 +1194,7 @@ public:
 		cmd.append(" ").append(key);
 		cmd.append(" ").append(field);
 		(cmd.append(" ").append(fields), ...);
-		return command<std::vector<std::string>>(std::move(cmd));
+		return impl_.command<std::vector<std::string>>(std::move(cmd));
 	}
 
 
@@ -1260,7 +1217,7 @@ public:
 		cmd.append(" ").append(field);
 		cmd.append(" ").append(value);
 		(cmd.append(" ").append(args), ...);
-		return command<std::vector<std::string>>(std::move(cmd));
+		return impl_.command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Scan fields of the given hash matching the given pattern.
@@ -1298,7 +1255,9 @@ public:
 	inline awaiter_t<scan_ret_t> hscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
-		uint64_t count = 0);
+		uint64_t count = 0) {
+		return impl_.hscan(key, cursor, pattern, count);
+	}
 
 	/// @brief Set hash field to value.
 	/// @param key Key where the hash is stored.
@@ -1318,7 +1277,7 @@ public:
 		cmd.append(" ").append(field);
 		cmd.append(" ").append(val);
 		(cmd.append(" ").append(args), ...);
-		return command<std::vector<uint64_t>>(std::move(cmd));
+		return impl_.command<std::vector<uint64_t>>(std::move(cmd));
 	}
 
 	/// @brief Set multiple fields of the given hash.
@@ -1344,7 +1303,7 @@ public:
 	/// @retval false If failed to set the field, i.e. the field already exists.
 	/// @see https://redis.io/commands/hsetnx
 	inline awaiter_t<uint64_t> hsetnx(std::string_view key, std::string_view field, std::string_view val) {
-		return command<uint64_t>(fmt::format("hsetnx {} {} {}", key, field, val));
+		return impl_.command<uint64_t>(fmt::format("hsetnx {} {} {}", key, field, val));
 	}
 
 	/// @brief Get the length of the string stored at the given field.
@@ -1353,7 +1312,7 @@ public:
 	/// @return Length of the string.
 	/// @see https://redis.io/commands/hstrlen
 	inline awaiter_t<uint64_t> hstrlen(std::string_view key, std::string_view field) {
-		return command<uint64_t>(fmt::format("hstrlen {} {}", key, field));
+		return impl_.command<uint64_t>(fmt::format("hstrlen {} {}", key, field));
 	}
 
 	/// @brief Get values of all fields stored at the given hash.
@@ -1363,7 +1322,7 @@ public:
 	/// @see `Redis::hscan`
 	/// @see https://redis.io/commands/hvals
 	inline awaiter_t<std::vector<std::string>> hvals(std::string_view key) {
-		return command<std::vector<std::string>>(fmt::format("hvals {}", key));
+		return impl_.command<std::vector<std::string>>(fmt::format("hvals {}", key));
 	}
 
 	// SET commands.
@@ -1381,7 +1340,7 @@ public:
 		cmd.append(" ").append(key);
 		cmd.append(" ").append(member);
 		(cmd.append(" ").append(members), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Get the number of members in the set.
@@ -1389,7 +1348,7 @@ public:
 	/// @return Number of members.
 	/// @see https://redis.io/commands/scard
 	inline awaiter_t<uint64_t> scard(std::string_view key) {
-		return command<uint64_t>(fmt::format("scard {}", key));
+		return impl_.command<uint64_t>(fmt::format("scard {}", key));
 	}
 
 	/// @brief Get the difference between the first set and all successive sets.
@@ -1403,7 +1362,7 @@ public:
 		std::string cmd("sdiff");
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Copy set stored at `key` to `destination`.
@@ -1417,7 +1376,7 @@ public:
 		cmd.append(" ").append(destination);
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Get the intersection between the first set and all successive sets.
@@ -1431,7 +1390,7 @@ public:
 		std::string cmd("sinter");
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 
@@ -1446,7 +1405,7 @@ public:
 		cmd.append(" ").append(destination);
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Test if `member` exists in the set stored at key.
@@ -1457,7 +1416,7 @@ public:
 	/// @retval false If it does not exist in the set, or the given key does not exist.
 	/// @see https://redis.io/commands/sismember
 	inline awaiter_t<uint64_t> sismember(std::string_view key, std::string_view member) {
-		return command<uint64_t>(fmt::format("sismember {} {}", key, member));
+		return impl_.command<uint64_t>(fmt::format("sismember {} {}", key, member));
 	}
 
 	/// @brief Get all members in the given set.
@@ -1473,7 +1432,7 @@ public:
 	/// @param output Iterator to the destination where the result is saved.
 	/// @see https://redis.io/commands/smembers
 	inline awaiter_t<std::vector<std::string>> smembers(std::string_view key) {
-		return command<std::vector<std::string>>(fmt::format("smembers {}", key));
+		return impl_.command<std::vector<std::string>>(fmt::format("smembers {}", key));
 	}
 
 	/// @brief Move `member` from one set to another.
@@ -1486,7 +1445,7 @@ public:
 	inline awaiter_t<uint64_t> smove(std::string_view source,
 		std::string_view destination,
 		std::string_view member) {
-		return command<uint64_t>(fmt::format("smove {} {} {}", source, destination, member));
+		return impl_.command<uint64_t>(fmt::format("smove {} {} {}", source, destination, member));
 	}
 
 	/// @brief Remove a random member from the set.
@@ -1496,7 +1455,7 @@ public:
 	/// @see `Redis::srandmember`
 	/// @see https://redis.io/commands/spop
 	inline awaiter_t<std::vector<std::string>> spop(std::string_view key, uint64_t count = 1) {
-		return command<std::vector<std::string>>(fmt::format("spop {} {}", key, count));
+		return impl_.command<std::vector<std::string>>(fmt::format("spop {} {}", key, count));
 	}
 
 	/// @brief Get a random member of the given set.
@@ -1507,7 +1466,7 @@ public:
 	/// @see `Redis::spop`
 	/// @see https://redis.io/commands/srandmember
 	inline awaiter_t<std::string> srandmember(std::string_view key) {
-		return command<std::string>(fmt::format("srandmember {}", key));
+		return impl_.command<std::string>(fmt::format("srandmember {}", key));
 	}
 
 	/// @brief Get multiple random members of the given set.
@@ -1518,7 +1477,7 @@ public:
 	/// @see `Redis::spop`
 	/// @see https://redis.io/commands/srandmember
 	inline awaiter_t<std::vector<std::string>> srandmember(std::string_view key, uint64_t count) {
-		return command<std::vector<std::string>>(fmt::format("srandmember {} {}", key, count));
+		return impl_.command<std::vector<std::string>>(fmt::format("srandmember {} {}", key, count));
 	}
 
 	/// @brief Remove a member from set.
@@ -1534,7 +1493,7 @@ public:
 		cmd.append(" ").append(key);
 		cmd.append(" ").append(member);
 		(cmd.append(" ").append(members), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Scan members of the set matching the given pattern.
@@ -1566,7 +1525,9 @@ public:
 	inline awaiter_t<scan_ret_t> sscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
-		uint64_t count = 0);
+		uint64_t count = 0) {
+		return impl_.sscan(key, cursor, pattern, count);
+	}
 
 	/// @brief Get the union between the first set and all successive sets.
 	/// @param first Iterator to the first set.
@@ -1579,7 +1540,7 @@ public:
 		std::string cmd("sunion");
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Copy set stored at `key` to `destination`.
@@ -1593,7 +1554,7 @@ public:
 		cmd.append(" ").append(destination);
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(keys), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	// SORTED SET commands.
@@ -1612,7 +1573,7 @@ public:
 			cmd.append(" ").append(key);
 		}
 		cmd.append(" ").append(std::to_string(timeout));
-		return command<std::vector<std::string>>(std::move(cmd));
+		return impl_.command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Pop the member with lowest score from sorted set in a blocking way.
@@ -1631,7 +1592,7 @@ public:
 			cmd.append(" ").append(key);
 		}
 		cmd.append(" ").append(std::to_string(timeout));
-		return command<std::vector<std::string>>(std::move(cmd));
+		return impl_.command<std::vector<std::string>>(std::move(cmd));
 	}
 
 	/// @brief Add or update a member with score to sorted set.
@@ -1654,7 +1615,9 @@ public:
 	inline awaiter_t<uint64_t> zadd(std::string_view key,
 		std::string_view member,
 		double score,
-		UpdateType type = UpdateType::ALWAYS);
+		UpdateType type = UpdateType::ALWAYS) {
+		return impl_.zadd(key, member, score, type);
+	}
 
 	/// @brief Add or update multiple members with score to sorted set.
 	///
@@ -1680,8 +1643,10 @@ public:
 	/// @see `UpdateType`
 	/// @see https://redis.io/commands/zadd
 	inline awaiter_t<uint64_t> zadd(std::string_view key,
-		std::vector<std::pair<std::string_view,double>> kvs,
-		UpdateType type = UpdateType::ALWAYS);
+		std::vector<std::pair<std::string_view, double>> kvs,
+		UpdateType type = UpdateType::ALWAYS) {
+		return impl_.zadd(key, kvs, type);
+	}
 
 	/// @brief Add or update multiple members with score to sorted set.
 	///
@@ -1718,7 +1683,7 @@ public:
 	/// @return Number of members in the sorted set.
 	/// @see https://redis.io/commands/zcard
 	inline awaiter_t<uint64_t> zcard(std::string_view key) {
-		return command<uint64_t>(fmt::format("zcard {}", key));
+		return impl_.command<uint64_t>(fmt::format("zcard {}", key));
 	}
 
 	/// @brief Get the number of members with score between a min-max score range.
@@ -1737,7 +1702,7 @@ public:
 	/// @see https://redis.io/commands/zcount
 	// TODO: add a string version of Interval: zcount("key", "2.3", "5").
 	inline awaiter_t<uint64_t> zcount(std::string_view key, std::string_view min, std::string_view max) {
-		return command<uint64_t>(fmt::format("zcount {} {} {}", key, min, max));
+		return impl_.command<uint64_t>(fmt::format("zcount {} {} {}", key, min, max));
 	}
 
 	/// @brief Increment the score of given member.
@@ -1746,8 +1711,8 @@ public:
 	/// @param member Member.
 	/// @return The score of the member after the operation.
 	/// @see https://redis.io/commands/zincrby
-	double zincrby(std::string_view key, double increment, std::string_view member) {
-		return command<double>(fmt::format("zincrby {} {} {}", key, increment, member));
+	inline awaiter_t<double> zincrby(std::string_view key, double increment, std::string_view member) {
+		return impl_.command<double>(fmt::format("zincrby {} {} {}", key, increment, member));
 	}
 /*
 	/// @brief Copy a sorted set to another one with the scores being multiplied by a factor.
@@ -1760,7 +1725,7 @@ public:
 	/// @see `Redis::zunionstore`
 	/// @see https://redis.io/commands/zinterstore
 	//inline awaiter_t<uint64_t> zinterstore(std::string_view destination, std::string_view key, double weight) {
-	//	return command<double>(fmt::format("zinterstore {} {} {}", key, increment, member));
+	//	return impl_.command<double>(fmt::format("zinterstore {} {} {}", key, increment, member));
 	//}
 
 
@@ -1813,7 +1778,7 @@ public:
 	/// @see https://redis.io/commands/zlexcount
 	// TODO: add a string version of Interval: zlexcount("key", "(abc", "abd").
 	inline awaiter_t<uint64_t> zlexcount(std::string_view key, std::string_view min, std::string_view max) {
-		return command<uint64_t>(fmt::format("zlexcount {} {} {}", key, min, max));
+		return impl_.command<uint64_t>(fmt::format("zlexcount {} {} {}", key, min, max));
 	}
 
 	/// @brief Pop the member with highest score from sorted set.
@@ -1824,7 +1789,7 @@ public:
 	/// @see `Redis::bzpopmax`
 	/// @see https://redis.io/commands/zpopmax
 	inline awaiter_t<std::vector<std::string>> zpopmax(std::string_view key, uint64_t count = 1) {
-		return command<std::vector<std::string>>(fmt::format("zpopmax {} {}", key, count));
+		return impl_.command<std::vector<std::string>>(fmt::format("zpopmax {} {}", key, count));
 	}
 
 	/// @brief Pop the member with lowest score from sorted set.
@@ -1835,7 +1800,7 @@ public:
 	/// @see `Redis::bzpopmin`
 	/// @see https://redis.io/commands/zpopmin
 	inline awaiter_t<std::vector<std::string>> zpopmin(std::string_view key) {
-		return command<std::vector<std::string>>(fmt::format("zpopmin {} {}", key, count));
+		return impl_.command<std::vector<std::string>>(fmt::format("zpopmin {}", key));
 	}
 
 	/// @brief Get a range of members by rank (ordered from lowest to highest).
@@ -1861,7 +1826,7 @@ public:
 	/// @see `Redis::zrevrange`
 	/// @see https://redis.io/commands/zrange
 	inline awaiter_t<std::vector<std::string>> zrange(std::string_view key, std::string_view min, std::string_view max) {
-		return command<std::vector<std::string>>(fmt::format("zrange {} {} {}", key, min, max));
+		return impl_.command<std::vector<std::string>>(fmt::format("zrange {} {} {}", key, min, max));
 	}
 
 	/// @brief Get a range of members by lexicographical order (from lowest to highest).
@@ -1887,7 +1852,7 @@ public:
 	/// @see https://redis.io/commands/zrangebylex
 	/// 
 	inline awaiter_t<std::vector<std::string>> zrangebylex(std::string_view key, std::string_view min, std::string_view max) {
-		return command<std::vector<std::string>>(fmt::format("zrangebylex {} {} {}", key, min, max));
+		return impl_.command<std::vector<std::string>>(fmt::format("zrangebylex {} {} {}", key, min, max));
 	}
 
 	/// @brief Get a range of members by score (ordered from lowest to highest).
@@ -1917,7 +1882,7 @@ public:
 	/// @see `Redis::zrevrangebyscore`
 	/// @see https://redis.io/commands/zrangebyscore
 	inline awaiter_t<std::vector<std::string>> zrangebyscore(std::string_view key, std::string_view min, std::string_view max) {
-		return command<std::vector<std::string>>(fmt::format("zrangebyscore {} {} {}", key, min, max));
+		return impl_.command<std::vector<std::string>>(fmt::format("zrangebyscore {} {} {}", key, min, max));
 	}
 
 	/// @brief Get the rank (from low to high) of the given member in the sorted set.
@@ -1927,7 +1892,7 @@ public:
 	/// @note If the member does not exist, `zrank` returns `OptionalLongLong{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/zrank
 	inline awaiter_t<uint64_t> zrank(std::string_view key, std::string_view member) {
-		return command<std::vector<std::string>>(fmt::format("zrank {} {}", key, member));
+		return impl_.command<uint64_t>(fmt::format("zrank {} {}", key, member));
 	}
 
 	/// @brief Remove the given member from sorted set.
@@ -1938,12 +1903,12 @@ public:
 	/// @retval 0 If the member does not exist.
 	/// @see https://redis.io/commands/zrem
 	template<typename ...Args>
-	inline awaiter_t<uint64_t> srem(std::string_view key, std::string_view member, Args&&... members) {
+	inline awaiter_t<uint64_t> zrem(std::string_view key, std::string_view member, Args&&... members) {
 		std::string cmd("zrem");
 		cmd.append(" ").append(key);
 		cmd.append(" ").append(member);
 		(cmd.append(" ").append(members), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 	/// @brief Remove members in the given range of lexicographical order.
@@ -1959,7 +1924,7 @@ public:
 	/// @see `BoundType`
 	/// @see https://redis.io/commands/zremrangebylex
 	inline awaiter_t<uint64_t> zremrangebylex(std::string_view key, std::string_view min, std::string_view max) {
-		return command<uint64_t>(fmt::format("zremrangebylex {} {} {}", key, min, max));
+		return impl_.command<uint64_t>(fmt::format("zremrangebylex {} {} {}", key, min, max));
 	}
 
 	/// @brief Remove members in the given range ordered by rank.
@@ -1969,7 +1934,7 @@ public:
 	/// @return Number of members removed.
 	/// @see https://redis.io/commands/zremrangebyrank
 	inline awaiter_t<uint64_t> zremrangebyrank(std::string_view key, uint64_t start, uint64_t stop) {
-		return command<uint64_t>(fmt::format("zremrangebyrank {} {} {}", key, start, stop));
+		return impl_.command<uint64_t>(fmt::format("zremrangebyrank {} {} {}", key, start, stop));
 	}
 
 	/// @brief Remove members in the given range ordered by score.
@@ -1979,7 +1944,7 @@ public:
 	/// @note See `Redis::zcount`'s *Example* part for how to set the `interval` parameter.
 	/// @see https://redis.io/commands/zremrangebyscore
 	inline awaiter_t<uint64_t> zremrangebyscore(std::string_view key, std::string_view min, std::string_view max) {
-		return command<uint64_t>(fmt::format("zremrangebyscore {} {} {}", key, min, max));
+		return impl_.command<uint64_t>(fmt::format("zremrangebyscore {} {} {}", key, min, max));
 	}
 
 	/// @brief Get a range of members by rank (ordered from highest to lowest).
@@ -2005,7 +1970,7 @@ public:
 	/// @see `Redis::zrange`
 	/// @see https://redis.io/commands/zrevrange
 	inline awaiter_t<std::string> zrevrange(std::string_view key, uint64_t start, uint64_t stop, bool withscores = false) {
-		return command<uint64_t>(fmt::format("zrevrange {} {} {} {}", key, start, stop, (withscores? "WITHSCORES" : "")));
+		return impl_.command<std::string>(fmt::format("zrevrange {} {} {} {}", key, start, stop, (withscores? "WITHSCORES" : "")));
 	}
 
 	/// @brief Get a range of members by lexicographical order (from highest to lowest).
@@ -2030,7 +1995,7 @@ public:
 	/// @see `Redis::zrangebylex`
 	/// @see https://redis.io/commands/zrevrangebylex
 	inline awaiter_t<std::string> zrevrangebylex(std::string_view key, std::string_view min, std::string_view max) {
-		return command<std::string>(fmt::format("zrevrangebylex {} {} {}", key, min, max));
+		return impl_.command<std::string>(fmt::format("zrevrangebylex {} {} {}", key, min, max));
 	}
 
 
@@ -2062,7 +2027,7 @@ public:
 	/// @see https://redis.io/commands/zrevrangebyscore
 	template <typename Interval, typename Output>
 	inline awaiter_t<std::string> zrevrangebyscore(std::string_view key, std::string_view min, std::string_view max) {
-		return command<uint64_t>(fmt::format("zrevrangebyscore {} {} {}", key, min, max));
+		return impl_.command<uint64_t>(fmt::format("zrevrangebyscore {} {} {}", key, min, max));
 	}
 
 	/// @brief Get the rank (from high to low) of the given member in the sorted set.
@@ -2072,7 +2037,7 @@ public:
 	/// @note If the member does not exist, `zrevrank` returns `OptionalLongLong{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/zrevrank
 	inline awaiter_t<uint64_t> zrevrank(std::string_view key, std::string_view member) {
-		return command<std::string>(fmt::format("zrevrank {} {}", key, member));
+		return impl_.command<uint64_t>(fmt::format("zrevrank {} {}", key, member));
 	}
 
 	/// @brief Scan all members of the given sorted set.
@@ -2094,10 +2059,12 @@ public:
 	/// @param output Output iterator to the destination where the result is saved.
 	/// @return The cursor to be used for the next scan operation.
 	/// @see https://redis.io/commands/zscan
-	inline awaiter_t<uint64_t> zscan(std::string_view key,
+	inline awaiter_t<scan_ret_t> zscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
-		uint64_t count);
+		uint64_t count) {
+		return impl_.zscan(key, cursor, pattern, count);
+	}
 
 	/// @brief Get the score of the given member.
 	/// @param key Key where the sorted set is stored.
@@ -2106,7 +2073,7 @@ public:
 	/// @note If member does not exist, `zscore` returns `OptionalDouble{}` (`std::nullopt`).
 	/// @see https://redis.io/commands/zscore
 	inline awaiter_t<double> zscore(std::string_view key, std::string_view member) {
-		return command<double>(fmt::format("zscore {} {}", key, member));
+		return impl_.command<double>(fmt::format("zscore {} {}", key, member));
 	}
 
 	/// @brief Copy a sorted set to another one with the scores being multiplied by a factor.
@@ -2119,7 +2086,9 @@ public:
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zinterstore
 	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
-		std::initializer_list<std::string_view> keys, std::string_view aggregate = "SUM");
+		std::initializer_list<std::string_view> keys, std::string_view aggregate = "SUM") {
+		return impl_.zunionstore(destination, keys, aggregate);
+	}
 
 	/// @brief Get union of multiple sorted sets, and store the result to another one.
 	///
@@ -2155,9 +2124,10 @@ public:
 	///       See the *Example* part for examples on how to use this command.
 	/// @see `Redis::zinterstore`
 	/// @see https://redis.io/commands/zunionstore
-	template<typename ...Args>
 	inline awaiter_t<uint64_t> zunionstore(std::string_view destination,
-		std::vector<std::pair<std::string_view, double>> kvs, std::string_view aggregate = "SUM");
+		std::vector<std::pair<std::string_view, double>> kvs, std::string_view aggregate = "SUM") {
+		return impl_.zunionstore(destination, kvs, aggregate);
+	}
 
 	// HYPERLOGLOG commands.
 
@@ -2176,16 +2146,17 @@ public:
 		std::string cmd("pfadd");
 		cmd.append(" ").append(key);
 		(cmd.append(" ").append(elements), ...);
-		return command<uint64_t>(std::move(cmd));
+		return impl_.command<uint64_t>(std::move(cmd));
 	}
 
 private:
 	connection() = default;
-	inline awaiter_t<scan_ret_t> send_scan_cmd(std::string_view cmd);
+	inline awaiter_t<scan_ret_t> send_scan_cmd(std::string_view cmd) {
+		return impl_.send_scan_cmd(cmd);
+	}
 
 private:
-	redisAsyncContext* redis_ctx_ = nullptr;                  // redis contex
+	impl::connection_impl impl_;
+
 }; // class connectin
 } // namespace coro_redis
-
-#include <coro_redis/connection.ipp>

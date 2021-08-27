@@ -11,22 +11,68 @@
 #include <coro_redis/task.hpp>
 
 namespace coro_redis {
+
+template<typename T>
+struct is_string
+	: public std::disjunction<
+	std::is_same<char*, typename std::decay_t<T>>,
+	std::is_same<const char*, typename std::decay_t<T>>,
+	std::is_same<std::string, typename std::decay_t<T>>,
+	std::is_same<std::string_view, typename std::decay_t<T>>
+	> {
+	constexpr operator bool() const { return true; }
+};
+
+template<typename T>
+concept RedisSetValueType = std::is_integral<T>::value || is_string<T>::value;
+
+template<typename T>
+concept StringValueType = is_string<T>::value;
+
+enum class UpdateType {
+	ALWAYS,
+	EXIST,
+	NOT_EXIST,
+	LESS_THAN,
+	GREATE_THAN,
+	CHANGED,
+	INCR,
+};
+enum class RedisTTLType {
+	EX,
+	PX,
+	EXAT,
+	PXAT,
+	KEEPTTL,
+};
+
+namespace impl {
+
+class connection_impl {
+public:
+	template <typename CORO_RET>
+	using awaiter_t = task_awaiter<CORO_RET, redisReply*>;
+
+	using scan_ret_t = std::pair<uint64_t, std::vector<std::string>>;
+
+	connection_impl(redisAsyncContext* actx) : redis_ctx_(actx) {}
+
 	template<typename CORO_RET>
-	connection::awaiter_t<CORO_RET> connection::command(std::string_view cmd) const {
-		return connection::awaiter_t<CORO_RET>(
-			[this, c = std::string(cmd)](connection::awaiter_t<CORO_RET>* awaiter,
+	awaiter_t<CORO_RET> command(std::string_view cmd) const {
+		return awaiter_t<CORO_RET>(
+			[this, c = std::string(cmd)](awaiter_t<CORO_RET>* awaiter,
 										const coro::coroutine_handle<>& h) {
 			char* pcmd = nullptr;
 			auto cmd_len = redisFormatCommand(&pcmd, c.c_str());
 			auto ret = redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
-				connection::awaiter_t<CORO_RET>* awaiter = reinterpret_cast<connection::awaiter_t<CORO_RET>*>(pcb_data);
+				awaiter_t<CORO_RET>* awaiter = reinterpret_cast<awaiter_t<CORO_RET>*>(pcb_data);
 				if (reply) {
 					awaiter->set_coro_return((redisReply*)reply);
 				}
 				awaiter->resume();
 				}, awaiter, pcmd, cmd_len);
 			redisFreeCommand(pcmd);
-		}, [](connection::awaiter_t<CORO_RET>* awaiter, const coro::coroutine_handle<>& h) -> std::optional<CORO_RET> {
+		}, [](awaiter_t<CORO_RET>* awaiter, const coro::coroutine_handle<>& h) -> std::optional<CORO_RET> {
 			ASSERT_RETURN(awaiter->coro_return().has_value(), std::nullopt, "redis return null.");
 			redisReply* ret = awaiter->coro_return().value();
 			if (ret->type == REDIS_REPLY_NIL) {
@@ -76,28 +122,28 @@ namespace coro_redis {
 
 
 	template<typename CORO_RET>
-	connection::awaiter_t<CORO_RET> connection::command(std::string_view cmd, std::function<std::optional<CORO_RET>(redisReply*)>&& reply_op) const {
-		return connection::awaiter_t<CORO_RET>(
-			[this, c = std::string(cmd)](connection::awaiter_t<CORO_RET>* awaiter,
+	awaiter_t<CORO_RET> command(std::string_view cmd, std::function<std::optional<CORO_RET>(redisReply*)>&& reply_op) const {
+		return awaiter_t<CORO_RET>(
+			[this, c = std::string(cmd)](awaiter_t<CORO_RET>* awaiter,
 				const coro::coroutine_handle<>& h) {
 			char* pcmd = nullptr;
 			auto cmd_len = redisFormatCommand(&pcmd, c.c_str());
 			auto ret = redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
-				connection::awaiter_t<CORO_RET>* awaiter = reinterpret_cast<connection::awaiter_t<CORO_RET>*>(pcb_data);
+				awaiter_t<CORO_RET>* awaiter = reinterpret_cast<awaiter_t<CORO_RET>*>(pcb_data);
 				if (reply) {
 					awaiter->set_coro_return((redisReply*)reply);
 				}
 				awaiter->resume();
 				}, awaiter, pcmd, cmd_len);
 			redisFreeCommand(pcmd);
-		}, [op = std::move(reply_op)](connection::awaiter_t<CORO_RET>* awaiter, const coro::coroutine_handle<>& h) -> std::optional<CORO_RET> {
+		}, [op = std::move(reply_op)](awaiter_t<CORO_RET>* awaiter, const coro::coroutine_handle<>& h) -> std::optional<CORO_RET> {
 			ASSERT_RETURN(awaiter->coro_return().has_value(), std::nullopt, "redis return null.");
 			if (op == nullptr) return std::nullopt;
 			return op(awaiter->coro_return().value());
 		});
 	}
 
-	inline connection::awaiter_t<connection::scan_ret_t> connection::scan(uint64_t cursor,
+	inline awaiter_t<scan_ret_t> scan(uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count) {
 		std::string cmd("scan");
@@ -111,7 +157,7 @@ namespace coro_redis {
 		return send_scan_cmd(cmd);
 	}
 
-	connection::awaiter_t<connection::scan_ret_t> connection::hscan(std::string_view key,
+	awaiter_t<scan_ret_t> hscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count) {
@@ -127,7 +173,7 @@ namespace coro_redis {
 		return send_scan_cmd(cmd);
 	}
 
-	connection::awaiter_t<connection::scan_ret_t> connection::sscan(std::string_view key,
+	awaiter_t<scan_ret_t> sscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count) {
@@ -143,7 +189,7 @@ namespace coro_redis {
 		return send_scan_cmd(cmd);
 	}
 
-	connection::awaiter_t<connection::scan_ret_t> connection::zscan(std::string_view key,
+	awaiter_t<scan_ret_t> zscan(std::string_view key,
 		uint64_t cursor,
 		std::string_view pattern,
 		uint64_t count) {
@@ -159,7 +205,7 @@ namespace coro_redis {
 		return send_scan_cmd(cmd);
 	}
 
-	connection::awaiter_t<connection::scan_ret_t> connection::send_scan_cmd(std::string_view cmd) {
+	awaiter_t<scan_ret_t> send_scan_cmd(std::string_view cmd) {
 		return command<scan_ret_t>(cmd, [](redisReply* reply) -> std::optional<scan_ret_t> {
 			scan_ret_t ret;
 			ASSERT_RETURN(reply->type == REDIS_REPLY_ARRAY, ret, "scan result type not match, {}", reply->type);
@@ -183,11 +229,11 @@ namespace coro_redis {
 			});
 	}
 	template<RedisSetValueType T>
-	connection::awaiter_t<std::string> connection::set(std::string_view key,
+	awaiter_t<std::string> set(std::string_view key,
 		T val,
-		uint64_t ttl = 0,
-		RedisTTLType ttl_type = RedisTTLType::EX,
-		UpdateType type = UpdateType::ALWAYS) {
+		uint64_t ttl,
+		RedisTTLType ttl_type,
+		UpdateType type) {
 		std::string cmd(fmt::format("set {} {}", key, val));
 		if (ttl > 0 && ttl_type != RedisTTLType::KEEPTTL) {
 			switch (ttl_type) {
@@ -203,12 +249,12 @@ namespace coro_redis {
 		}
 		switch (type) {
 		case UpdateType::EXIST: cmd.append(" XX "); break;
-		case RedisSetType::NOT_EXIST: cmd.append(" NX "); break;
+		case UpdateType::NOT_EXIST: cmd.append(" NX "); break;
 		}
 		return command<std::string>(std::move(cmd));
 	}
 
-	connection::awaiter_t<uint64_t> connection::hset(std::string_view key, const std::vector<std::pair<std::string_view, std::string_view>>& kvs) {
+	awaiter_t<uint64_t> hset(std::string_view key, const std::vector<std::pair<std::string_view, std::string_view>>& kvs) {
 		std::string cmd("hset");
 		cmd.append(" ").append(key);
 		for (const auto& kv : kvs)
@@ -219,10 +265,10 @@ namespace coro_redis {
 		return command<uint64_t>(std::move(cmd));
 	}
 
-	connection::awaiter_t<uint64_t> connection::zadd(std::string_view key,
+	awaiter_t<uint64_t> zadd(std::string_view key,
 		std::string_view member,
 		double score,
-		UpdateType type = UpdateType::ALWAYS) {
+		UpdateType type) {
 		std::string cmd("zadd");
 		cmd.append(" ").append(key);
 		switch (type)
@@ -239,9 +285,9 @@ namespace coro_redis {
 		return command<uint64_t>(std::move(cmd));
 	}
 
-	connection::awaiter_t<uint64_t> connection::zadd(std::string_view key,
+	awaiter_t<uint64_t> zadd(std::string_view key,
 		std::vector<std::pair<std::string_view, double>> kvs,
-		UpdateType type = UpdateType::ALWAYS) {
+		UpdateType type) {
 		std::string cmd("zadd");
 		cmd.append(" ").append(key);
 		switch (type)
@@ -253,7 +299,7 @@ namespace coro_redis {
 		case UpdateType::CHANGED: cmd.append(" CH "); break;
 		case UpdateType::INCR: cmd.append(" INCR "); break;
 		}
-		for (const autu& kv : kvs)
+		for (const auto& kv : kvs)
 		{
 			cmd.append(" ").append(std::to_string(kv.second));
 			cmd.append(" ").append(kv.first);
@@ -261,7 +307,7 @@ namespace coro_redis {
 		return command<uint64_t>(std::move(cmd));
 	}
 
-	connection::awaiter_t<uint64_t> connection::zunionstore(std::string_view destination, 
+	awaiter_t<uint64_t> zunionstore(std::string_view destination, 
 		std::initializer_list<std::string_view> keys, std::string_view aggregate) {
 		if (keys.size() == 0) return {};
 
@@ -276,13 +322,13 @@ namespace coro_redis {
 		return command<uint64_t>(std::move(cmd));
 	}
 
-	connection::awaiter_t<uint64_t> connection::zunionstore(std::string_view destination,
+	awaiter_t<uint64_t> zunionstore(std::string_view destination,
 		std::vector<std::pair<std::string_view, double>> kvs, std::string_view aggregate) {
-		if (keys.size() == 0) return {};
+		if (kvs.size() == 0) return {};
 
 		std::string cmd("zadd");
 		cmd.append(" ").append(destination);
-		cmd.append(" ").append(std::to_string(keys.size()));
+		cmd.append(" ").append(std::to_string(kvs.size()));
 		for (const auto& kv : kvs)
 		{
 			cmd.append(" ").append(kv.first);
@@ -290,9 +336,13 @@ namespace coro_redis {
 		cmd.append(" WEIGHTS ");
 		for (const auto& kv : kvs)
 		{
-			cmd.append(" ").append(kv.second);
+			cmd.append(" ").append(std::to_string(kv.second));
 		}
 		cmd.append(" ").append(aggregate);
 		return command<uint64_t>(std::move(cmd));
 	}
+private:
+	redisAsyncContext* redis_ctx_ = nullptr;                  // redis contex
+}; // class connection_impl
+} // namespace impl
 } // namespace coro_redis

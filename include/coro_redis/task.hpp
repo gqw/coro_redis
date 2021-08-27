@@ -8,6 +8,7 @@
 #pragma once
 
 #include <any>
+#include <functional>
 #include <optional>
 #include <coroutine>
 #include <coro_redis/config.hpp>
