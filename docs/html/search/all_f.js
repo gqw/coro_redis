@@ -1,0 +1,27 @@
+var searchData=
+[
+  ['sadd_80',['sadd',['../classcoro__redis_1_1connection.html#afae78f8359e8c4403bae06eb37134a11',1,'coro_redis::connection']]],
+  ['save_81',['save',['../classcoro__redis_1_1connection.html#afc1a92f05f3301c7be450f0a1ddd4268',1,'coro_redis::connection']]],
+  ['scan_82',['scan',['../classcoro__redis_1_1connection.html#a58253ae2160e30500d428c04204820e6',1,'coro_redis::connection']]],
+  ['scard_83',['scard',['../classcoro__redis_1_1connection.html#ab804b3a76f04ae92b5bba30176a5b276',1,'coro_redis::connection']]],
+  ['sdiff_84',['sdiff',['../classcoro__redis_1_1connection.html#ae34007b3c150974f6226ad9ddbcf6ec0',1,'coro_redis::connection']]],
+  ['sdiffstore_85',['sdiffstore',['../classcoro__redis_1_1connection.html#a89d1bdd4e520003743575f195e9126f9',1,'coro_redis::connection']]],
+  ['select_86',['select',['../classcoro__redis_1_1connection.html#a15761493b97c165ebed7b21eb2e14d6f',1,'coro_redis::connection']]],
+  ['set_87',['set',['../classcoro__redis_1_1connection.html#afeccc5e933ff6bdba9f5036cdbde226c',1,'coro_redis::connection']]],
+  ['setex_88',['setex',['../classcoro__redis_1_1connection.html#ae8fea96606b8d320922b54920f9e5d78',1,'coro_redis::connection']]],
+  ['setnx_89',['setnx',['../classcoro__redis_1_1connection.html#ac25969e794c54b7cf0e5b0e5ff3558de',1,'coro_redis::connection']]],
+  ['setrange_90',['setrange',['../classcoro__redis_1_1connection.html#ae4ffd58a1e50aba761fef42d71cf995d',1,'coro_redis::connection']]],
+  ['sinter_91',['sinter',['../classcoro__redis_1_1connection.html#a837b80595a7095ebe3191aeeaec855bd',1,'coro_redis::connection']]],
+  ['sinterstore_92',['sinterstore',['../classcoro__redis_1_1connection.html#aa53d39bb5ac7e8eaf7ad290582598781',1,'coro_redis::connection']]],
+  ['sismember_93',['sismember',['../classcoro__redis_1_1connection.html#a8bb6f83c50a755f08df35914759d494e',1,'coro_redis::connection']]],
+  ['smembers_94',['smembers',['../classcoro__redis_1_1connection.html#a96af15e7271ad5cc56a9c7903b05f69f',1,'coro_redis::connection']]],
+  ['smove_95',['smove',['../classcoro__redis_1_1connection.html#a48759082bd38f1dffac7a9cca46c750b',1,'coro_redis::connection']]],
+  ['spop_96',['spop',['../classcoro__redis_1_1connection.html#aa70d6d3fb5f72aca377eb669ad071738',1,'coro_redis::connection']]],
+  ['srandmember_97',['srandmember',['../classcoro__redis_1_1connection.html#a47de17aaf41f253ec6fc252dd5e07105',1,'coro_redis::connection::srandmember(std::string_view key)'],['../classcoro__redis_1_1connection.html#ae94e8934c94982567b7a219dc9b4d33b',1,'coro_redis::connection::srandmember(std::string_view key, uint64_t count)']]],
+  ['srem_98',['srem',['../classcoro__redis_1_1connection.html#acabe2699341bfc587fb1854fbbbfafce',1,'coro_redis::connection']]],
+  ['sscan_99',['sscan',['../classcoro__redis_1_1connection.html#aef19d95ae78e20e2cbd65de7eb8dce37',1,'coro_redis::connection']]],
+  ['strlen_100',['strlen',['../classcoro__redis_1_1connection.html#a605cd2814bfaad5cb0b98bae4fe8ca6a',1,'coro_redis::connection']]],
+  ['sunion_101',['sunion',['../classcoro__redis_1_1connection.html#a6a025bf4f30404005a1d0ff44ab93760',1,'coro_redis::connection']]],
+  ['sunionstore_102',['sunionstore',['../classcoro__redis_1_1connection.html#a6a0dac727f995ff1733702db98068c3e',1,'coro_redis::connection']]],
+  ['swapdb_103',['swapdb',['../classcoro__redis_1_1connection.html#a6a3d14434c22a64c54d1f37d04ff6251',1,'coro_redis::connection']]]
+];
