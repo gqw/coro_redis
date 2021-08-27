@@ -613,11 +613,14 @@ task<bool> coro_redis_test(event_base* base, std::string_view host, uint16_t por
 
 自此hiredis协程的基本封装工作已经结束了，剩下的就是针对redis的各种命令进行优化处理。
 
-## 待完成内容
+## 待完善内容
 
 	1. redis指令还未完全封装完
 	2. 网络库封装，现在默认使用libevent
 	3. 连接池
+	4. 文档
+	5. 单元测试
+	6. 性能测试
 
 
 
