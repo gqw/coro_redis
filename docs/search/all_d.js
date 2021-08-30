@@ -1,4 +1,11 @@
 var searchData=
 [
-  ['quit_71',['quit',['../classcoro__redis_1_1connection.html#ad28bff6aba15c977d5be2849da557ee1',1,'coro_redis::connection']]]
+  ['randomkey_71',['randomkey',['../classcoro__redis_1_1coro__connection.html#a9fd890122ffe0335dcfaa95231a6aced',1,'coro_redis::coro_connection::randomkey()'],['../classcoro__redis_1_1sync__connection.html#a00b596fd668b7cdfb2d2cf24bca37e97',1,'coro_redis::sync_connection::randomkey()']]],
+  ['rename_72',['rename',['../classcoro__redis_1_1coro__connection.html#abbf099822303789b07241f37fe2f711d',1,'coro_redis::coro_connection::rename()'],['../classcoro__redis_1_1sync__connection.html#a6550563bb98bc89e95576881aa46c151',1,'coro_redis::sync_connection::rename()']]],
+  ['renamenx_73',['renamenx',['../classcoro__redis_1_1coro__connection.html#a6903146a136e342ad88c71169aeffe2c',1,'coro_redis::coro_connection::renamenx()'],['../classcoro__redis_1_1sync__connection.html#ab09b8fdfe64e266e2d5d71690bc58365',1,'coro_redis::sync_connection::renamenx()']]],
+  ['restore_74',['restore',['../classcoro__redis_1_1coro__connection.html#a07b35c7d9b89ed8c9f1b3c7e2c9dd89a',1,'coro_redis::coro_connection::restore()'],['../classcoro__redis_1_1sync__connection.html#a7a67ef541e7f9af72f65660d8cc0ae6b',1,'coro_redis::sync_connection::restore()']]],
+  ['rpop_75',['rpop',['../classcoro__redis_1_1coro__connection.html#ac2a0a31265972be2c674f0e1ce750b43',1,'coro_redis::coro_connection::rpop()'],['../classcoro__redis_1_1sync__connection.html#a0e285e1e3cd3aa652fa7d599bb39f0d3',1,'coro_redis::sync_connection::rpop()']]],
+  ['rpoplpush_76',['rpoplpush',['../classcoro__redis_1_1coro__connection.html#ac41f5045c1687e3e57afb7953b22d346',1,'coro_redis::coro_connection::rpoplpush()'],['../classcoro__redis_1_1sync__connection.html#a8b63db9752f6fd89bc1c3f46df673948',1,'coro_redis::sync_connection::rpoplpush()']]],
+  ['rpush_77',['rpush',['../classcoro__redis_1_1coro__connection.html#a08ff468dae74ff85572eab87e017eaff',1,'coro_redis::coro_connection::rpush()'],['../classcoro__redis_1_1sync__connection.html#ae3e846977434a90b982c15cc45b26952',1,'coro_redis::sync_connection::rpush()']]],
+  ['rpushx_78',['rpushx',['../classcoro__redis_1_1coro__connection.html#a1fe5cd20ac7e6a2fab7c173f2517538d',1,'coro_redis::coro_connection::rpushx()'],['../classcoro__redis_1_1sync__connection.html#a3d8a341f8d8b323636c7fb6b33918688',1,'coro_redis::sync_connection::rpushx()']]]
 ];

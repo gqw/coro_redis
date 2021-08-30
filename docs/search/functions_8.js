@@ -1,7 +1,7 @@
 var searchData=
 [
-  ['incr_196',['incr',['../classcoro__redis_1_1connection.html#a15405af586017c881ccf547e21d29029',1,'coro_redis::connection']]],
-  ['incrby_197',['incrby',['../classcoro__redis_1_1connection.html#afb83115c674938f8035aa81ac46fcfad',1,'coro_redis::connection']]],
-  ['incrbyfloat_198',['incrbyfloat',['../classcoro__redis_1_1connection.html#a6b91c11c100530889a870e93d53a51a3',1,'coro_redis::connection']]],
-  ['info_199',['info',['../classcoro__redis_1_1connection.html#ab87fb38dab79b8a578ea14de07032eb2',1,'coro_redis::connection::info()'],['../classcoro__redis_1_1connection.html#a90955401e15feb441e38efcaa67c8213',1,'coro_redis::connection::info(std::string_view section)']]]
+  ['incr_181',['incr',['../classcoro__redis_1_1coro__connection.html#aaddb4ca2cefee0bdeaed216ead443c1a',1,'coro_redis::coro_connection::incr()'],['../classcoro__redis_1_1sync__connection.html#ae7b8451c9097f69bf3f2892cf0c7c834',1,'coro_redis::sync_connection::incr()']]],
+  ['incrby_182',['incrby',['../classcoro__redis_1_1coro__connection.html#a27b1cdbc15cf41053531f579f9cf9b5b',1,'coro_redis::coro_connection::incrby()'],['../classcoro__redis_1_1sync__connection.html#a9e8ac3675f56b6fbb4a2089f2fccdcb3',1,'coro_redis::sync_connection::incrby()']]],
+  ['incrbyfloat_183',['incrbyfloat',['../classcoro__redis_1_1coro__connection.html#a0d71ba58af8e80441598b2d395745971',1,'coro_redis::coro_connection::incrbyfloat()'],['../classcoro__redis_1_1sync__connection.html#af712313772bdd6ebcfe5de0114b6aee7',1,'coro_redis::sync_connection::incrbyfloat()']]],
+  ['info_184',['info',['../classcoro__redis_1_1coro__connection.html#a8c3c85b49de3233b00fdd2c2dfc44e1d',1,'coro_redis::coro_connection::info()'],['../classcoro__redis_1_1coro__connection.html#a9df4183a5e15a171774570101b4e30aa',1,'coro_redis::coro_connection::info(std::string_view section)'],['../classcoro__redis_1_1sync__connection.html#a15f3d259a618a14cc0f97432d45b35ff',1,'coro_redis::sync_connection::info()'],['../classcoro__redis_1_1sync__connection.html#a78b9752eff75871735b1e7347e934ca9',1,'coro_redis::sync_connection::info(std::string_view section)']]]
 ];

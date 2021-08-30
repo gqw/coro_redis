@@ -1,8 +1,7 @@
 var searchData=
 [
   ['client_9',['client',['../classcoro__redis_1_1client.html',1,'coro_redis']]],
-  ['client_5fimpl_10',['client_impl',['../classcoro__redis_1_1impl_1_1client__impl.html',1,'coro_redis::impl']]],
-  ['command_11',['command',['../classcoro__redis_1_1connection.html#abfb21388b1c6ca502d979872956783c2',1,'coro_redis::connection::command(std::string_view cmd) const'],['../classcoro__redis_1_1connection.html#a7a033547c7cf74ece1e63d934baefa0d',1,'coro_redis::connection::command(std::string_view cmd, std::function&lt; std::optional&lt; CORO_RET &gt;(redisReply *)&gt; &amp;&amp;reply_op) const']]],
-  ['connection_12',['connection',['../classcoro__redis_1_1connection.html',1,'coro_redis']]],
-  ['connection_5fimpl_13',['connection_impl',['../classcoro__redis_1_1impl_1_1connection__impl.html',1,'coro_redis::impl']]]
+  ['command_10',['command',['../classcoro__redis_1_1coro__connection.html#afb0331d230fe9fd39316ca780d8eb810',1,'coro_redis::coro_connection::command(std::string_view cmd) const'],['../classcoro__redis_1_1coro__connection.html#acad98a1fbb59805e2a229c39c22cf5bd',1,'coro_redis::coro_connection::command(std::string_view cmd, std::function&lt; std::optional&lt; CORO_RET &gt;(redisReply *)&gt; &amp;&amp;reply_op) const'],['../classcoro__redis_1_1sync__connection.html#a0d6078321046f4ce076587402ddf3789',1,'coro_redis::sync_connection::command()']]],
+  ['coro_5fconnect_11',['coro_connect',['../classcoro__redis_1_1client.html#a9339e87aef0c1e34ebf00b90da715d50',1,'coro_redis::client']]],
+  ['coro_5fconnection_12',['coro_connection',['../classcoro__redis_1_1coro__connection.html',1,'coro_redis::coro_connection'],['../classcoro__redis_1_1coro__connection.html#aff7959518f7bef86a56ed4b61419b960',1,'coro_redis::coro_connection::coro_connection()']]]
 ];

@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['append_156',['append',['../classcoro__redis_1_1connection.html#ad4232d3ffc9ec471f25384ebbbfce0ec',1,'coro_redis::connection']]],
-  ['auth_157',['auth',['../classcoro__redis_1_1connection.html#a053c896b24742f8ee1483b9d15a72a6f',1,'coro_redis::connection::auth(std::string_view password)'],['../classcoro__redis_1_1connection.html#af29d06015e269af8de7e53ebfc70a578',1,'coro_redis::connection::auth(std::string_view user, std::string_view password)']]]
+  ['append_138',['append',['../classcoro__redis_1_1coro__connection.html#a453f55ff8b067180e758c33a722f8f95',1,'coro_redis::coro_connection::append()'],['../classcoro__redis_1_1sync__connection.html#ace61b8c6282d972a93d37168514a67df',1,'coro_redis::sync_connection::append()']]],
+  ['auth_139',['auth',['../classcoro__redis_1_1coro__connection.html#a06d200321ba33a1cacff857cf4de69e2',1,'coro_redis::coro_connection::auth(std::string_view password)'],['../classcoro__redis_1_1coro__connection.html#a133f8c741a8ba3b3b9d378676aa06226',1,'coro_redis::coro_connection::auth(std::string_view user, std::string_view password)'],['../classcoro__redis_1_1sync__connection.html#a2b3c9608703080731f6446a48a0843c3',1,'coro_redis::sync_connection::auth(std::string_view password)'],['../classcoro__redis_1_1sync__connection.html#ac5b48c81b338e387ade29474c0e3d7f9',1,'coro_redis::sync_connection::auth(std::string_view user, std::string_view password)']]]
 ];

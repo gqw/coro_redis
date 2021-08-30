@@ -1,12 +1,12 @@
 var searchData=
 [
-  ['lastsave_50',['lastsave',['../classcoro__redis_1_1connection.html#af46ce7cfdfd8a474da62ac84ed68912a',1,'coro_redis::connection']]],
-  ['llen_51',['llen',['../classcoro__redis_1_1connection.html#a16d8a316acf9f1cc828393e36f287166',1,'coro_redis::connection']]],
-  ['lpop_52',['lpop',['../classcoro__redis_1_1connection.html#adbda75130a7f03a206178464eb2b8daa',1,'coro_redis::connection']]],
-  ['lpush_53',['lpush',['../classcoro__redis_1_1connection.html#ae45845b41c5ec7ed8276aff09d020dde',1,'coro_redis::connection::lpush(std::string_view key, std::string_view val)'],['../classcoro__redis_1_1connection.html#a11a3ba1896904443d8cf247e412b81d1',1,'coro_redis::connection::lpush(std::string_view key, Args &amp;&amp;... keys)']]],
-  ['lpushx_54',['lpushx',['../classcoro__redis_1_1connection.html#afd922e0b161e25204f35f6197bd905b9',1,'coro_redis::connection']]],
-  ['lrange_55',['lrange',['../classcoro__redis_1_1connection.html#ad946e04bf24eb334eb5bad9cf316964c',1,'coro_redis::connection']]],
-  ['lrem_56',['lrem',['../classcoro__redis_1_1connection.html#a04b9b8c2b25481d2f1f415c351f0b404',1,'coro_redis::connection']]],
-  ['lset_57',['lset',['../classcoro__redis_1_1connection.html#aedda41154d6ca7dede1bb333af53bb3c',1,'coro_redis::connection']]],
-  ['ltrim_58',['ltrim',['../classcoro__redis_1_1connection.html#a3331476c43dc86870ad1c02e3806002c',1,'coro_redis::connection']]]
+  ['lastsave_49',['lastsave',['../classcoro__redis_1_1coro__connection.html#a37517cf941f9a7267734287e3f152dea',1,'coro_redis::coro_connection::lastsave()'],['../classcoro__redis_1_1sync__connection.html#a63ff798e3a7e1d0781db31cc5933fdc2',1,'coro_redis::sync_connection::lastsave()']]],
+  ['llen_50',['llen',['../classcoro__redis_1_1coro__connection.html#ab742f90703051d0954b88316e0043c93',1,'coro_redis::coro_connection::llen()'],['../classcoro__redis_1_1sync__connection.html#a8acede5cf003ab5eb0c3e2df9e980b5c',1,'coro_redis::sync_connection::llen()']]],
+  ['lpop_51',['lpop',['../classcoro__redis_1_1coro__connection.html#a7fc61da81a9cc5dc1c7853aedec49362',1,'coro_redis::coro_connection::lpop()'],['../classcoro__redis_1_1sync__connection.html#aa1afc0239cfca4cd095faeb501f1a686',1,'coro_redis::sync_connection::lpop()']]],
+  ['lpush_52',['lpush',['../classcoro__redis_1_1coro__connection.html#a3a9287b68ef1fe59aa908bd18a22ae41',1,'coro_redis::coro_connection::lpush(std::string_view key, std::string_view val)'],['../classcoro__redis_1_1coro__connection.html#aed8df4028862f17c19ed31c91121aa9b',1,'coro_redis::coro_connection::lpush(std::string_view key, Args &amp;&amp;... keys)'],['../classcoro__redis_1_1sync__connection.html#afa0be919681356eca77fe6fc7d736445',1,'coro_redis::sync_connection::lpush(std::string_view key, std::string_view val)'],['../classcoro__redis_1_1sync__connection.html#a3fa95b1e6d9979d21d0312ca0561bd8b',1,'coro_redis::sync_connection::lpush(std::string_view key, Args &amp;&amp;... keys)']]],
+  ['lpushx_53',['lpushx',['../classcoro__redis_1_1coro__connection.html#a89353d4c3f5123d6f5aa442aaf78b64e',1,'coro_redis::coro_connection::lpushx()'],['../classcoro__redis_1_1sync__connection.html#a6d2b6cc948c56f4483ffcde56714fade',1,'coro_redis::sync_connection::lpushx()']]],
+  ['lrange_54',['lrange',['../classcoro__redis_1_1coro__connection.html#a7cb7bb9a8df30f22d6a9f8c77ddb99a7',1,'coro_redis::coro_connection::lrange()'],['../classcoro__redis_1_1sync__connection.html#a869dc52b1481c8d425920631355f13d6',1,'coro_redis::sync_connection::lrange()']]],
+  ['lrem_55',['lrem',['../classcoro__redis_1_1coro__connection.html#ac3d13b0fdf30c856f59a9c1d6dc63499',1,'coro_redis::coro_connection::lrem()'],['../classcoro__redis_1_1sync__connection.html#ac78db624f4c59b38fdcb832f0b2e3aed',1,'coro_redis::sync_connection::lrem()']]],
+  ['lset_56',['lset',['../classcoro__redis_1_1coro__connection.html#a6fffeb2ba22dc630915e66a6a07418cc',1,'coro_redis::coro_connection::lset()'],['../classcoro__redis_1_1sync__connection.html#abaeb77a3f44cf7ddad47aaf924fe4b93',1,'coro_redis::sync_connection::lset()']]],
+  ['ltrim_57',['ltrim',['../classcoro__redis_1_1coro__connection.html#af7a086e48f2d733766def9bf70e49af9',1,'coro_redis::coro_connection::ltrim()'],['../classcoro__redis_1_1sync__connection.html#ab203113950d44f3608659c5e1df4ed05',1,'coro_redis::sync_connection::ltrim()']]]
 ];

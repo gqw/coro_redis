@@ -1,10 +1,10 @@
 var searchData=
 [
-  ['bgrewriteaof_158',['bgrewriteaof',['../classcoro__redis_1_1connection.html#a8f223085ec27116d2a2a7c80675095b2',1,'coro_redis::connection']]],
-  ['bgsave_159',['bgsave',['../classcoro__redis_1_1connection.html#a2236759698088791904610853f9713bd',1,'coro_redis::connection']]],
-  ['bitcount_160',['bitcount',['../classcoro__redis_1_1connection.html#a0563b62bb80f5041bc62fbc7e37a01f3',1,'coro_redis::connection']]],
-  ['bitop_161',['bitop',['../classcoro__redis_1_1connection.html#a0063ff6a10d63fdd8cea80f628f8beb6',1,'coro_redis::connection']]],
-  ['bitpos_162',['bitpos',['../classcoro__redis_1_1connection.html#a6cf9032a56c8a40e50b9fc2a743c1df2',1,'coro_redis::connection']]],
-  ['bzpopmax_163',['bzpopmax',['../classcoro__redis_1_1connection.html#a1c96a34b19735eb486b57727acf648ae',1,'coro_redis::connection']]],
-  ['bzpopmin_164',['bzpopmin',['../classcoro__redis_1_1connection.html#a1b0f93295c624c58ec90092470eb4e8f',1,'coro_redis::connection']]]
+  ['bgrewriteaof_140',['bgrewriteaof',['../classcoro__redis_1_1coro__connection.html#aaea1a1692348c8a671ac9b3e0c5efddd',1,'coro_redis::coro_connection::bgrewriteaof()'],['../classcoro__redis_1_1sync__connection.html#adea0ac75d862c81071fdbcc29c9a6bbd',1,'coro_redis::sync_connection::bgrewriteaof()']]],
+  ['bgsave_141',['bgsave',['../classcoro__redis_1_1coro__connection.html#a66fdd787464f9471ef3f6d3c03bb557b',1,'coro_redis::coro_connection::bgsave()'],['../classcoro__redis_1_1sync__connection.html#a6520df97e2c74a08c721a9b7ee1cc5c2',1,'coro_redis::sync_connection::bgsave()']]],
+  ['bitcount_142',['bitcount',['../classcoro__redis_1_1coro__connection.html#a486f72d0b0b4586b60f74e4741639cb0',1,'coro_redis::coro_connection::bitcount()'],['../classcoro__redis_1_1sync__connection.html#ac1f9e0b894e8a37e15f9302e1edebed9',1,'coro_redis::sync_connection::bitcount()']]],
+  ['bitop_143',['bitop',['../classcoro__redis_1_1coro__connection.html#aaffd2b9440e25874139cedec3118573b',1,'coro_redis::coro_connection::bitop()'],['../classcoro__redis_1_1sync__connection.html#ab6f3c9b81819ebec0917c40b7dad423e',1,'coro_redis::sync_connection::bitop()']]],
+  ['bitpos_144',['bitpos',['../classcoro__redis_1_1coro__connection.html#a3f93e89f3b491dd0ab052d0578b86786',1,'coro_redis::coro_connection::bitpos()'],['../classcoro__redis_1_1sync__connection.html#afc1453868a3ac84ed492dea113ca32d1',1,'coro_redis::sync_connection::bitpos()']]],
+  ['bzpopmax_145',['bzpopmax',['../classcoro__redis_1_1coro__connection.html#a0d8bab1729ffbb339353b6360aa4a844',1,'coro_redis::coro_connection::bzpopmax()'],['../classcoro__redis_1_1sync__connection.html#a0b3d9002f3ae0daaca3c8b05247e67a2',1,'coro_redis::sync_connection::bzpopmax()']]],
+  ['bzpopmin_146',['bzpopmin',['../classcoro__redis_1_1coro__connection.html#aae5f5b746e41921bd7602f6bfac8927a',1,'coro_redis::coro_connection::bzpopmin()'],['../classcoro__redis_1_1sync__connection.html#a4b34ac9573dc51fc9588282721241072',1,'coro_redis::sync_connection::bzpopmin()']]]
 ];

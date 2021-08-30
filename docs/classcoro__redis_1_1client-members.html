@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.18"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>coro_rediis: Member List</title>
+<title>coro_redis: Member List</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -21,7 +21,7 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;">
-   <div id="projectname">coro_rediis
+   <div id="projectname">coro_redis
    &#160;<span id="projectnumber">1.0.0.0</span>
    </div>
    <div id="projectbrief">C++ Corotine Redis Client</div>
@@ -74,9 +74,14 @@ $(function() {
 
 <p>This is the complete list of members for <a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a>, including all inherited members.</p>
 <table class="directory">
-  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>awaiter_t</b> typedef (defined in <a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a>)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"></td></tr>
-  <tr bgcolor="#f0f0f0"><td class="entry"><b>connect</b>(event_base *base, std::string_view host_sv, uint16_t port, long timeout_seconds=5) (defined in <a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a>)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>conn_awaiter_t</b> typedef (defined in <a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a>)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"></td></tr>
+  <tr><td class="entry"><a class="el" href="classcoro__redis_1_1client.html#a9339e87aef0c1e34ebf00b90da715d50">coro_connect</a>(const io_context &amp;ioc, std::string_view host, uint16_t port, long timeout_seconds=5)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>fetch_awaiter_t</b> typedef (defined in <a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a>)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"></td></tr>
+  <tr><td class="entry"><a class="el" href="classcoro__redis_1_1client.html#a9d2340b310cdb79a71567dbc376d41c3">fetch_coro_conn</a>()</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">get</a>()</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span><span class="mlabel">static</span></td></tr>
+  <tr><td class="entry"><a class="el" href="classcoro__redis_1_1client.html#a20b3f8e0e4fd696b60ba5e5671db1304">pool_init</a>(std::vector&lt; io_context * &gt; pool_ios, std::string_view host_sv, uint16_t port, long timeout_seconds=5)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classcoro__redis_1_1client.html#a75b2d00ababcb5cd37f7c68678162219">sync_connect</a>(std::string_view host_sv, uint16_t port, long timeout_seconds=5)</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr><td class="entry"><a class="el" href="classcoro__redis_1_1client.html#a5702e0508e731a8ec646558f4f8d52f5">sync_fetch_conn</a>()</td><td class="entry"><a class="el" href="classcoro__redis_1_1client.html">coro_redis::client</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
 </table></div><!-- contents -->
 <!-- start footer part -->
 <hr class="footer"/><address class="footer"><small>

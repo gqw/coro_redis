@@ -12,8 +12,8 @@
 #include <hiredis/async.h>
 
 #include <coro_redis/impl/config.ipp>
+#include <coro_redis/impl/task.ipp>
 #include <coro_redis/sync_connection.hpp>
-#include <coro_redis/task.hpp>
 
 namespace coro_redis {
 

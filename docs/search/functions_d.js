@@ -1,11 +1,11 @@
 var searchData=
 [
-  ['randomkey_221',['randomkey',['../classcoro__redis_1_1connection.html#af7eed34f2ad3c28eb3c226763209f639',1,'coro_redis::connection']]],
-  ['rename_222',['rename',['../classcoro__redis_1_1connection.html#abc8ae31f1e54e89f85239336c0b85e88',1,'coro_redis::connection']]],
-  ['renamenx_223',['renamenx',['../classcoro__redis_1_1connection.html#ae6a7684da219cc3d5913aa2015bb87bd',1,'coro_redis::connection']]],
-  ['restore_224',['restore',['../classcoro__redis_1_1connection.html#a6ea381fbdfe3a78ec968949d9ad17f40',1,'coro_redis::connection']]],
-  ['rpop_225',['rpop',['../classcoro__redis_1_1connection.html#a26202808f72e0cee34370feb5176a990',1,'coro_redis::connection']]],
-  ['rpoplpush_226',['rpoplpush',['../classcoro__redis_1_1connection.html#a43f5814e56532472cc308924b05601bb',1,'coro_redis::connection']]],
-  ['rpush_227',['rpush',['../classcoro__redis_1_1connection.html#aa4cd2f18878363da88b3396ed5f92140',1,'coro_redis::connection']]],
-  ['rpushx_228',['rpushx',['../classcoro__redis_1_1connection.html#ad689b17dd12b81d8eee0c61c8af46f49',1,'coro_redis::connection']]]
+  ['randomkey_207',['randomkey',['../classcoro__redis_1_1coro__connection.html#a9fd890122ffe0335dcfaa95231a6aced',1,'coro_redis::coro_connection::randomkey()'],['../classcoro__redis_1_1sync__connection.html#a00b596fd668b7cdfb2d2cf24bca37e97',1,'coro_redis::sync_connection::randomkey()']]],
+  ['rename_208',['rename',['../classcoro__redis_1_1coro__connection.html#abbf099822303789b07241f37fe2f711d',1,'coro_redis::coro_connection::rename()'],['../classcoro__redis_1_1sync__connection.html#a6550563bb98bc89e95576881aa46c151',1,'coro_redis::sync_connection::rename()']]],
+  ['renamenx_209',['renamenx',['../classcoro__redis_1_1coro__connection.html#a6903146a136e342ad88c71169aeffe2c',1,'coro_redis::coro_connection::renamenx()'],['../classcoro__redis_1_1sync__connection.html#ab09b8fdfe64e266e2d5d71690bc58365',1,'coro_redis::sync_connection::renamenx()']]],
+  ['restore_210',['restore',['../classcoro__redis_1_1coro__connection.html#a07b35c7d9b89ed8c9f1b3c7e2c9dd89a',1,'coro_redis::coro_connection::restore()'],['../classcoro__redis_1_1sync__connection.html#a7a67ef541e7f9af72f65660d8cc0ae6b',1,'coro_redis::sync_connection::restore()']]],
+  ['rpop_211',['rpop',['../classcoro__redis_1_1coro__connection.html#ac2a0a31265972be2c674f0e1ce750b43',1,'coro_redis::coro_connection::rpop()'],['../classcoro__redis_1_1sync__connection.html#a0e285e1e3cd3aa652fa7d599bb39f0d3',1,'coro_redis::sync_connection::rpop()']]],
+  ['rpoplpush_212',['rpoplpush',['../classcoro__redis_1_1coro__connection.html#ac41f5045c1687e3e57afb7953b22d346',1,'coro_redis::coro_connection::rpoplpush()'],['../classcoro__redis_1_1sync__connection.html#a8b63db9752f6fd89bc1c3f46df673948',1,'coro_redis::sync_connection::rpoplpush()']]],
+  ['rpush_213',['rpush',['../classcoro__redis_1_1coro__connection.html#a08ff468dae74ff85572eab87e017eaff',1,'coro_redis::coro_connection::rpush()'],['../classcoro__redis_1_1sync__connection.html#ae3e846977434a90b982c15cc45b26952',1,'coro_redis::sync_connection::rpush()']]],
+  ['rpushx_214',['rpushx',['../classcoro__redis_1_1coro__connection.html#a1fe5cd20ac7e6a2fab7c173f2517538d',1,'coro_redis::coro_connection::rpushx()'],['../classcoro__redis_1_1sync__connection.html#a3d8a341f8d8b323636c7fb6b33918688',1,'coro_redis::sync_connection::rpushx()']]]
 ];

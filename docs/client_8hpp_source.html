@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.18"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>coro_rediis: include/coro_redis/client.hpp Source File</title>
+<title>coro_redis: include/coro_redis/client.hpp Source File</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -21,7 +21,7 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;">
-   <div id="projectname">coro_rediis
+   <div id="projectname">coro_redis
    &#160;<span id="projectnumber">1.0.0.0</span>
    </div>
    <div id="projectbrief">C++ Corotine Redis Client</div>
@@ -81,42 +81,68 @@ $(function() {
 <div class="line"><a name="l00008"></a><span class="lineno">    8</span>&#160;<span class="preprocessor">#pragma once</span></div>
 <div class="line"><a name="l00009"></a><span class="lineno">    9</span>&#160; </div>
 <div class="line"><a name="l00010"></a><span class="lineno">   10</span>&#160;<span class="preprocessor">#include &lt;hiredis/hiredis.h&gt;</span></div>
-<div class="line"><a name="l00011"></a><span class="lineno">   11</span>&#160;<span class="preprocessor">#include &lt;coro_redis/task.hpp&gt;</span></div>
-<div class="line"><a name="l00012"></a><span class="lineno">   12</span>&#160;<span class="preprocessor">#include &lt;coro_redis/connection.hpp&gt;</span></div>
-<div class="line"><a name="l00013"></a><span class="lineno">   13</span>&#160;<span class="preprocessor">#include &lt;coro_redis/client.ipp&gt;</span></div>
-<div class="line"><a name="l00014"></a><span class="lineno">   14</span>&#160; </div>
-<div class="line"><a name="l00015"></a><span class="lineno">   15</span>&#160;<span class="keyword">struct </span>event_base;</div>
+<div class="line"><a name="l00011"></a><span class="lineno">   11</span>&#160;<span class="preprocessor">#include &lt;coro_redis/impl/client.ipp&gt;</span></div>
+<div class="line"><a name="l00012"></a><span class="lineno">   12</span>&#160;<span class="preprocessor">#include &lt;coro_redis/impl/task.ipp&gt;</span></div>
+<div class="line"><a name="l00013"></a><span class="lineno">   13</span>&#160;<span class="preprocessor">#include &lt;coro_redis/context.hpp&gt;</span></div>
+<div class="line"><a name="l00014"></a><span class="lineno">   14</span>&#160;<span class="preprocessor">#include &lt;coro_redis/coro_connection.hpp&gt;</span></div>
+<div class="line"><a name="l00015"></a><span class="lineno">   15</span>&#160;<span class="preprocessor">#include &lt;coro_redis/sync_connection.hpp&gt;</span></div>
 <div class="line"><a name="l00016"></a><span class="lineno">   16</span>&#160; </div>
 <div class="line"><a name="l00017"></a><span class="lineno">   17</span>&#160;<span class="keyword">namespace </span>coro_redis {</div>
-<div class="line"><a name="l00018"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html">   18</a></span>&#160;<span class="keyword">class </span><a class="code" href="classcoro__redis_1_1client.html">client</a> final {</div>
-<div class="line"><a name="l00019"></a><span class="lineno">   19</span>&#160;<span class="keyword">public</span>:</div>
-<div class="line"><a name="l00020"></a><span class="lineno">   20</span>&#160;    <span class="keyword">using</span> <a class="code" href="structcoro__redis_1_1task__awaiter.html">awaiter_t</a> = <a class="code" href="structcoro__redis_1_1task__awaiter.html">task_awaiter&lt;connection, const redisAsyncContext*&gt;</a>;</div>
-<div class="line"><a name="l00021"></a><span class="lineno">   21</span>&#160; </div>
-<div class="line"><a name="l00023"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">   23</a></span>&#160;    <span class="keyword">static</span> <a class="code" href="classcoro__redis_1_1client.html">client</a>&amp; <a class="code" href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">get</a>() {</div>
-<div class="line"><a name="l00024"></a><span class="lineno">   24</span>&#160;        <span class="keyword">static</span> <a class="code" href="classcoro__redis_1_1client.html">client</a> clt;</div>
-<div class="line"><a name="l00025"></a><span class="lineno">   25</span>&#160;        <span class="keywordflow">return</span> clt;</div>
-<div class="line"><a name="l00026"></a><span class="lineno">   26</span>&#160;    }</div>
-<div class="line"><a name="l00027"></a><span class="lineno">   27</span>&#160; </div>
-<div class="line"><a name="l00028"></a><span class="lineno">   28</span>&#160;    awaiter_t connect(event_base* base, std::string_view host_sv, uint16_t port, <span class="keywordtype">long</span> timeout_seconds = 5) {</div>
-<div class="line"><a name="l00029"></a><span class="lineno">   29</span>&#160;        <span class="keywordflow">return</span> impl_.connect(base, host_sv, port, timeout_seconds);</div>
-<div class="line"><a name="l00030"></a><span class="lineno">   30</span>&#160;    }</div>
-<div class="line"><a name="l00031"></a><span class="lineno">   31</span>&#160; </div>
-<div class="line"><a name="l00032"></a><span class="lineno">   32</span>&#160;    <span class="comment">//bool create_conn_pool(const std::vector&lt;event_base*&gt; contexts, std::string_view host_sv, uint16_t port, long timeout_seconds = 5);</span></div>
-<div class="line"><a name="l00033"></a><span class="lineno">   33</span>&#160;    <span class="comment">//awaiter_t fetch_conn();</span></div>
-<div class="line"><a name="l00034"></a><span class="lineno">   34</span>&#160; </div>
-<div class="line"><a name="l00035"></a><span class="lineno">   35</span>&#160;<span class="keyword">private</span>:</div>
-<div class="line"><a name="l00036"></a><span class="lineno">   36</span>&#160;    client() = <span class="keywordflow">default</span>;</div>
-<div class="line"><a name="l00037"></a><span class="lineno">   37</span>&#160;    client(<span class="keyword">const</span> client&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a name="l00038"></a><span class="lineno">   38</span>&#160;    <span class="keywordtype">void</span> operator =(<span class="keyword">const</span> client&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a name="l00039"></a><span class="lineno">   39</span>&#160; </div>
-<div class="line"><a name="l00040"></a><span class="lineno">   40</span>&#160;    impl::client_impl impl_;</div>
-<div class="line"><a name="l00041"></a><span class="lineno">   41</span>&#160;}; <span class="comment">// class client</span></div>
-<div class="line"><a name="l00042"></a><span class="lineno">   42</span>&#160;} <span class="comment">// namespace coro_redis</span></div>
-<div class="line"><a name="l00043"></a><span class="lineno">   43</span>&#160; </div>
+<div class="line"><a name="l00018"></a><span class="lineno">   18</span>&#160; </div>
+<div class="line"><a name="l00022"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html">   22</a></span>&#160;<span class="keyword">class </span><a class="code" href="classcoro__redis_1_1client.html">client</a> final {</div>
+<div class="line"><a name="l00023"></a><span class="lineno">   23</span>&#160;<span class="keyword">public</span>:</div>
+<div class="line"><a name="l00024"></a><span class="lineno">   24</span>&#160;    <span class="keyword">using</span> conn_awaiter_t = task_awaiter&lt;std::shared_ptr&lt;coro_connection&gt;, <span class="keyword">const</span> redisAsyncContext*&gt;;</div>
+<div class="line"><a name="l00025"></a><span class="lineno">   25</span>&#160;    <span class="keyword">using</span> fetch_awaiter_t = task_awaiter&lt;std::shared_ptr&lt;coro_connection&gt;&gt;;</div>
+<div class="line"><a name="l00029"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">   29</a></span>&#160;    <span class="keyword">static</span> <a class="code" href="classcoro__redis_1_1client.html">client</a>&amp; <a class="code" href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">get</a>() {</div>
+<div class="line"><a name="l00030"></a><span class="lineno">   30</span>&#160;        <span class="keyword">static</span> <a class="code" href="classcoro__redis_1_1client.html">client</a> clt;</div>
+<div class="line"><a name="l00031"></a><span class="lineno">   31</span>&#160;        <span class="keywordflow">return</span> clt;</div>
+<div class="line"><a name="l00032"></a><span class="lineno">   32</span>&#160;    }</div>
+<div class="line"><a name="l00033"></a><span class="lineno">   33</span>&#160; </div>
+<div class="line"><a name="l00047"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#a9339e87aef0c1e34ebf00b90da715d50">   47</a></span>&#160;    conn_awaiter_t <a class="code" href="classcoro__redis_1_1client.html#a9339e87aef0c1e34ebf00b90da715d50">coro_connect</a>(<span class="keyword">const</span> <a class="code" href="structcoro__redis_1_1io__context.html">io_context</a>&amp; ioc, </div>
+<div class="line"><a name="l00048"></a><span class="lineno">   48</span>&#160;        std::string_view host, </div>
+<div class="line"><a name="l00049"></a><span class="lineno">   49</span>&#160;        uint16_t port, </div>
+<div class="line"><a name="l00050"></a><span class="lineno">   50</span>&#160;        <span class="keywordtype">long</span> timeout_seconds = 5) {</div>
+<div class="line"><a name="l00051"></a><span class="lineno">   51</span>&#160;          <span class="keywordflow">return</span> impl_.coro_connect(ioc, host, port, timeout_seconds);</div>
+<div class="line"><a name="l00052"></a><span class="lineno">   52</span>&#160;    }</div>
+<div class="line"><a name="l00053"></a><span class="lineno">   53</span>&#160; </div>
+<div class="line"><a name="l00062"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#a75b2d00ababcb5cd37f7c68678162219">   62</a></span>&#160;    std::shared_ptr&lt;sync_connection&gt; <a class="code" href="classcoro__redis_1_1client.html#a75b2d00ababcb5cd37f7c68678162219">sync_connect</a>(std::string_view host_sv, </div>
+<div class="line"><a name="l00063"></a><span class="lineno">   63</span>&#160;        uint16_t port, </div>
+<div class="line"><a name="l00064"></a><span class="lineno">   64</span>&#160;        <span class="keywordtype">long</span> timeout_seconds = 5) {</div>
+<div class="line"><a name="l00065"></a><span class="lineno">   65</span>&#160;        <span class="keywordflow">return</span> impl_.sync_connect(host_sv, port, timeout_seconds);</div>
+<div class="line"><a name="l00066"></a><span class="lineno">   66</span>&#160;    }</div>
+<div class="line"><a name="l00067"></a><span class="lineno">   67</span>&#160; </div>
+<div class="line"><a name="l00078"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#a20b3f8e0e4fd696b60ba5e5671db1304">   78</a></span>&#160;    <span class="keywordtype">void</span> <a class="code" href="classcoro__redis_1_1client.html#a20b3f8e0e4fd696b60ba5e5671db1304">pool_init</a>(std::vector&lt;io_context*&gt; pool_ios,</div>
+<div class="line"><a name="l00079"></a><span class="lineno">   79</span>&#160;        std::string_view host_sv, uint16_t port,</div>
+<div class="line"><a name="l00080"></a><span class="lineno">   80</span>&#160;        <span class="keywordtype">long</span> timeout_seconds = 5) {</div>
+<div class="line"><a name="l00081"></a><span class="lineno">   81</span>&#160;        impl_.pool_init(pool_ios, host_sv, port, timeout_seconds);</div>
+<div class="line"><a name="l00082"></a><span class="lineno">   82</span>&#160;    }</div>
+<div class="line"><a name="l00083"></a><span class="lineno">   83</span>&#160; </div>
+<div class="line"><a name="l00097"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#a9d2340b310cdb79a71567dbc376d41c3">   97</a></span>&#160;    fetch_awaiter_t <a class="code" href="classcoro__redis_1_1client.html#a9d2340b310cdb79a71567dbc376d41c3">fetch_coro_conn</a>() {</div>
+<div class="line"><a name="l00098"></a><span class="lineno">   98</span>&#160;        <span class="keywordflow">return</span> impl_.fetch_coro_conn();</div>
+<div class="line"><a name="l00099"></a><span class="lineno">   99</span>&#160;    }</div>
+<div class="line"><a name="l00100"></a><span class="lineno">  100</span>&#160; </div>
+<div class="line"><a name="l00109"></a><span class="lineno"><a class="line" href="classcoro__redis_1_1client.html#a5702e0508e731a8ec646558f4f8d52f5">  109</a></span>&#160;    std::shared_ptr&lt;coro_connection&gt; <a class="code" href="classcoro__redis_1_1client.html#a5702e0508e731a8ec646558f4f8d52f5">sync_fetch_conn</a>() {</div>
+<div class="line"><a name="l00110"></a><span class="lineno">  110</span>&#160;        <span class="keywordflow">return</span> impl_.sync_fetch_conn();</div>
+<div class="line"><a name="l00111"></a><span class="lineno">  111</span>&#160;    }</div>
+<div class="line"><a name="l00112"></a><span class="lineno">  112</span>&#160; </div>
+<div class="line"><a name="l00113"></a><span class="lineno">  113</span>&#160;<span class="keyword">private</span>:</div>
+<div class="line"><a name="l00114"></a><span class="lineno">  114</span>&#160;    <a class="code" href="classcoro__redis_1_1client.html">client</a>() = <span class="keywordflow">default</span>;</div>
+<div class="line"><a name="l00115"></a><span class="lineno">  115</span>&#160;    <a class="code" href="classcoro__redis_1_1client.html">client</a>(<span class="keyword">const</span> <a class="code" href="classcoro__redis_1_1client.html">client</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a name="l00116"></a><span class="lineno">  116</span>&#160;    <span class="keywordtype">void</span> operator =(<span class="keyword">const</span> <a class="code" href="classcoro__redis_1_1client.html">client</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a name="l00117"></a><span class="lineno">  117</span>&#160; </div>
+<div class="line"><a name="l00118"></a><span class="lineno">  118</span>&#160;    impl::client_impl impl_;</div>
+<div class="line"><a name="l00119"></a><span class="lineno">  119</span>&#160;}; <span class="comment">// class client</span></div>
+<div class="line"><a name="l00120"></a><span class="lineno">  120</span>&#160;} <span class="comment">// namespace coro_redis</span></div>
+<div class="line"><a name="l00121"></a><span class="lineno">  121</span>&#160; </div>
 </div><!-- fragment --></div><!-- contents -->
-<div class="ttc" id="aclasscoro__redis_1_1client_html_acf4c539f472e2706a46c00c1a6377723"><div class="ttname"><a href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">coro_redis::client::get</a></div><div class="ttdeci">static client &amp; get()</div><div class="ttdoc">静态单例</div><div class="ttdef"><b>Definition:</b> client.hpp:23</div></div>
-<div class="ttc" id="astructcoro__redis_1_1task__awaiter_html"><div class="ttname"><a href="structcoro__redis_1_1task__awaiter.html">coro_redis::task_awaiter</a></div><div class="ttdef"><b>Definition:</b> task.hpp:115</div></div>
-<div class="ttc" id="aclasscoro__redis_1_1client_html"><div class="ttname"><a href="classcoro__redis_1_1client.html">coro_redis::client</a></div><div class="ttdef"><b>Definition:</b> client.hpp:18</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html_acf4c539f472e2706a46c00c1a6377723"><div class="ttname"><a href="classcoro__redis_1_1client.html#acf4c539f472e2706a46c00c1a6377723">coro_redis::client::get</a></div><div class="ttdeci">static client &amp; get()</div><div class="ttdoc">singleton for get client</div><div class="ttdef"><b>Definition:</b> client.hpp:29</div></div>
+<div class="ttc" id="astructcoro__redis_1_1io__context_html"><div class="ttname"><a href="structcoro__redis_1_1io__context.html">coro_redis::io_context</a></div><div class="ttdef"><b>Definition:</b> context.hpp:4</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html_a9339e87aef0c1e34ebf00b90da715d50"><div class="ttname"><a href="classcoro__redis_1_1client.html#a9339e87aef0c1e34ebf00b90da715d50">coro_redis::client::coro_connect</a></div><div class="ttdeci">conn_awaiter_t coro_connect(const io_context &amp;ioc, std::string_view host, uint16_t port, long timeout_seconds=5)</div><div class="ttdoc">Connect to redis server with corotine Example:</div><div class="ttdef"><b>Definition:</b> client.hpp:47</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html_a75b2d00ababcb5cd37f7c68678162219"><div class="ttname"><a href="classcoro__redis_1_1client.html#a75b2d00ababcb5cd37f7c68678162219">coro_redis::client::sync_connect</a></div><div class="ttdeci">std::shared_ptr&lt; sync_connection &gt; sync_connect(std::string_view host_sv, uint16_t port, long timeout_seconds=5)</div><div class="ttdoc">Connect to redis server synchronously.</div><div class="ttdef"><b>Definition:</b> client.hpp:62</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html_a20b3f8e0e4fd696b60ba5e5671db1304"><div class="ttname"><a href="classcoro__redis_1_1client.html#a20b3f8e0e4fd696b60ba5e5671db1304">coro_redis::client::pool_init</a></div><div class="ttdeci">void pool_init(std::vector&lt; io_context * &gt; pool_ios, std::string_view host_sv, uint16_t port, long timeout_seconds=5)</div><div class="ttdoc">Initializate redis connect pool.</div><div class="ttdef"><b>Definition:</b> client.hpp:78</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html_a9d2340b310cdb79a71567dbc376d41c3"><div class="ttname"><a href="classcoro__redis_1_1client.html#a9d2340b310cdb79a71567dbc376d41c3">coro_redis::client::fetch_coro_conn</a></div><div class="ttdeci">fetch_awaiter_t fetch_coro_conn()</div><div class="ttdoc">Fetch a connection from pool for corotine function.</div><div class="ttdef"><b>Definition:</b> client.hpp:97</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html_a5702e0508e731a8ec646558f4f8d52f5"><div class="ttname"><a href="classcoro__redis_1_1client.html#a5702e0508e731a8ec646558f4f8d52f5">coro_redis::client::sync_fetch_conn</a></div><div class="ttdeci">std::shared_ptr&lt; coro_connection &gt; sync_fetch_conn()</div><div class="ttdoc">Fetch a connection from pool for corotine function.</div><div class="ttdef"><b>Definition:</b> client.hpp:109</div></div>
+<div class="ttc" id="aclasscoro__redis_1_1client_html"><div class="ttname"><a href="classcoro__redis_1_1client.html">coro_redis::client</a></div><div class="ttdoc">Redis Client.</div><div class="ttdef"><b>Definition:</b> client.hpp:22</div></div>
 <!-- start footer part -->
 <hr class="footer"/><address class="footer"><small>
 Generated by &#160;<a href="http://www.doxygen.org/index.html">
