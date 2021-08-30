@@ -8,54 +8,25 @@
 #pragma once
 
 #include <memory>
+
+#include <hiredis/async.h>
+
+#include <coro_redis/impl/config.ipp>
+#include <coro_redis/sync_connection.hpp>
 #include <coro_redis/task.hpp>
 
 namespace coro_redis {
 
-template<typename T>
-struct is_string
-	: public std::disjunction<
-	std::is_same<char*, typename std::decay_t<T>>,
-	std::is_same<const char*, typename std::decay_t<T>>,
-	std::is_same<std::string, typename std::decay_t<T>>,
-	std::is_same<std::string_view, typename std::decay_t<T>>
-	> {
-	constexpr operator bool() const { return true; }
-};
-
-template<typename T>
-concept RedisSetValueType = std::is_integral<T>::value || is_string<T>::value;
-
-template<typename T>
-concept StringValueType = is_string<T>::value;
-
-enum class UpdateType {
-	ALWAYS,
-	EXIST,
-	NOT_EXIST,
-	LESS_THAN,
-	GREATE_THAN,
-	CHANGED,
-	INCR,
-};
-enum class RedisTTLType {
-	EX,
-	PX,
-	EXAT,
-	PXAT,
-	KEEPTTL,
-};
+template <typename CORO_RET>
+using awaiter_t = task_awaiter<CORO_RET, redisReply*>;
 
 namespace impl {
 
-class connection_impl {
+class coro_connection_impl {
 public:
-	template <typename CORO_RET>
-	using awaiter_t = task_awaiter<CORO_RET, redisReply*>;
+	coro_connection_impl(redisAsyncContext* actx) : redis_ctx_(actx) {}
 
-	using scan_ret_t = std::pair<uint64_t, std::vector<std::string>>;
-
-	connection_impl(redisAsyncContext* actx) : redis_ctx_(actx) {}
+	std::shared_ptr<sync_connection> sync() { return std::make_shared<sync_connection>(&redis_ctx_->c); }
 
 	template<typename CORO_RET>
 	awaiter_t<CORO_RET> command(std::string_view cmd) const {
@@ -74,52 +45,9 @@ public:
 			redisFreeCommand(pcmd);
 		}, [](awaiter_t<CORO_RET>* awaiter, const coro::coroutine_handle<>& h) -> std::optional<CORO_RET> {
 			ASSERT_RETURN(awaiter->coro_return().has_value(), std::nullopt, "redis return null.");
-			redisReply* ret = awaiter->coro_return().value();
-			if (ret->type == REDIS_REPLY_NIL) {
-				return std::nullopt;
-			}
-			if constexpr (std::is_same_v<CORO_RET, std::string>) {
-				ASSERT_RETURN(ret->type == REDIS_REPLY_STRING || ret->type == REDIS_REPLY_STATUS, std::nullopt,
-					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
-				return std::string(ret->str, ret->len);
-			}
-			if constexpr (std::is_same_v<CORO_RET, std::vector<std::string>>) {
-				ASSERT_RETURN(ret->type == REDIS_REPLY_ARRAY, std::nullopt,
-					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
-				std::vector<std::string> resp;
-				for (int i = 0; i < ret->elements; ++i)
-				{
-					if (ret->element[i]->type != REDIS_REPLY_STRING) {
-						resp.push_back("");
-					}
-					else {
-						resp.push_back(std::string(ret->element[i]->str, ret->element[i]->len));
-					}
-				}
-				return std::move(resp);
-			}
-			else if constexpr (std::is_same_v<CORO_RET, uint64_t>) {
-				ASSERT_RETURN(ret->type == REDIS_REPLY_INTEGER, std::nullopt,
-					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
-				return ret->integer;
-			}
-			else if constexpr (std::is_same_v<CORO_RET, double>) {
-				ASSERT_RETURN(ret->type == REDIS_REPLY_DOUBLE, std::nullopt,
-					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
-				return stod(std::string(ret->str, ret->len));
-			}
-			else if constexpr (std::is_same_v<CORO_RET, bool>) {
-				ASSERT_RETURN(ret->type == REDIS_REPLY_BOOL, std::nullopt,
-					"redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
-				return stol(std::string(ret->str, ret->len));
-			}
-			else if constexpr (std::is_void_v<CORO_RET>) {
-				return std::nullopt;
-			}
-			return std::nullopt;
+			return sync_connection_impl::deal_redis_reply<CORO_RET>(awaiter->coro_return().value());
 		});
 	}
-
 
 	template<typename CORO_RET>
 	awaiter_t<CORO_RET> command(std::string_view cmd, std::function<std::optional<CORO_RET>(redisReply*)>&& reply_op) const {

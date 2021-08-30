@@ -2,5 +2,5 @@
 
 #include <string_view>
 
-struct event_base;
-void test_coro_1(event_base* base, std::string_view host, uint16_t port);
+namespace coro_redis { struct io_context; }
+void test_coro_1(const coro_redis::io_context& ioc, std::string_view host, uint16_t port);

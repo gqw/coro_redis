@@ -11,7 +11,7 @@
 #include <functional>
 #include <optional>
 #include <coroutine>
-#include <coro_redis/config.hpp>
+#include <coro_redis/impl/config.ipp>
 
 namespace coro_redis {
 
