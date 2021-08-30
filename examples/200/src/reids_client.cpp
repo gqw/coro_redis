@@ -36,21 +36,21 @@ bool redis_client::connect(event_base* base, std::string_view host, uint16_t por
     opt.connect_timeout = &timeout;
     opt.command_timeout = &timeout;
     redisAsyncContext * actx = redisAsyncConnectWithOptions(&opt);
-	ASSERT_RETURN(actx != nullptr, false, "connect redis failed, {}:{}", host, port);
-	ASSERT_RETURN(actx->err == 0, false, "connect redis failed, {}:{}", actx->err, actx->errstr);
+    ASSERT_RETURN(actx != nullptr, false, "connect redis failed, {}:{}", host, port);
+    ASSERT_RETURN(actx->err == 0, false, "connect redis failed, {}:{}", actx->err, actx->errstr);
     ASSERT_RETURN(redisLibeventAttach(actx, base) == REDIS_OK, false, "redis event attach failed.");
 
     redisAsyncSetTimeout(actx, timeout);
 
-	redisAsyncSetConnectCallback(actx, [](const struct redisAsyncContext* actx, int status){
+    redisAsyncSetConnectCallback(actx, [](const struct redisAsyncContext* actx, int status) {
         redis_client::get().set_status(status);
         ASSERT_RETURN(status == REDIS_OK, void(0), "redis cconnect error, {}({})", actx->errstr, actx->err);
-		LOG_INFO("redis connect success.", status);
-	});
-	redisAsyncSetDisconnectCallback(actx, [](const struct redisAsyncContext* actx, int status){
-		LOG_INFO("redis disconnect status: {}", status);
+        LOG_INFO("redis connect success.", status);
+    });
+    redisAsyncSetDisconnectCallback(actx, [](const struct redisAsyncContext* actx, int status) {
+        LOG_INFO("redis disconnect status: {}", status);
         redis_client::get().set_status(status);
-	});
+    });
 
     redis_ctx_ = std::move(std::shared_ptr<redisAsyncContext>(actx, redisAsyncFree));
     return true;

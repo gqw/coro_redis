@@ -19,46 +19,46 @@ template<typename TASK_RET> class task_promise;
 struct nothing { };
 
 template <typename T>
-struct void_to_nothing
-{
+struct void_to_nothing {
     using type = T;
 };
 
 template <>
-struct void_to_nothing<void>
-{
+struct void_to_nothing<void> {
     using type = nothing;
 };
 
 
 template<typename TASK_RET>
 class task {
-public:
+  public:
     using promise_type = task_promise<TASK_RET>;
     using value_type = TASK_RET;
     //using cptr = const std::shared_ptr<T>&;
     friend class promise_type;
 
-public:
+  public:
     task(coro::coroutine_handle<promise_type> h) {
         h_coro_ = h;
     }
 
     ~task() {}
 
-    auto& handler() { return h_coro_; }
+    auto& handler() {
+        return h_coro_;
+    }
 
     TASK_RET return_value() {
         return ret_value_;
     }
 
-private:
+  private:
     void_to_nothing<TASK_RET>::type ret_value_{};
     coro::coroutine_handle<promise_type> h_coro_;
 };
 
 class task_promise_base {
-public:
+  public:
     auto initial_suspend() {
         return coro::suspend_never{};
     }
@@ -75,9 +75,11 @@ public:
         if (coro_ret.has_value()) coro_tmp_return_ = coro_ret;
     }
 
-    std::any& coro_return() { return coro_tmp_return_; }
+    std::any& coro_return() {
+        return coro_tmp_return_;
+    }
 
-private:
+  private:
     std::exception_ptr m_exception;
     std::any coro_tmp_return_{};
 };
@@ -87,13 +89,15 @@ constexpr get_promise_t get_promise = {};
 
 template<typename TASK_RET>
 class task_promise final : public task_promise_base {
-public:
+  public:
     using task_type = task<TASK_RET>;
     task<TASK_RET> get_return_object() noexcept {
         return task<TASK_RET>(coro::coroutine_handle<task_promise>::from_promise(*this));
     }
 
-    ~task_promise() { LOG_DEBUG("~task_promise"); }
+    ~task_promise() {
+        LOG_DEBUG("~task_promise");
+    }
 
     void return_value(TASK_RET value) {
         LOG_DEBUG("return_value: {}", value);
@@ -107,7 +111,7 @@ public:
 
 template<>
 class task_promise<void> final : public task_promise_base {
-public:
+  public:
     task<void> get_return_object() noexcept {
         return task<void>(coro::coroutine_handle<task_promise>::from_promise(*this));
     }
@@ -142,7 +146,7 @@ struct task_awaiter {
         return std::nullopt;
     }
 
-private:
+  private:
     suspend_cb_type suspend_callback_;
     resume_cb_type resume_callback_;
     bool want_pause_ = false;

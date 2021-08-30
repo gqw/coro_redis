@@ -14,14 +14,12 @@ template<typename T> class task_promise;
 struct nothing { };
 
 template <typename T>
-struct void_to_nothing
-{
+struct void_to_nothing {
     using type = T;
 };
 
 template <>
-struct void_to_nothing<void>
-{
+struct void_to_nothing<void> {
     using type = nothing;
 };
 
@@ -39,7 +37,9 @@ class task {
 
     ~task() { }
 
-    auto& handler() { return h_coro_; }
+    auto& handler() {
+        return h_coro_;
+    }
 
     T return_value() {
         return *ret_value_;
@@ -52,12 +52,12 @@ class task {
 
 class task_promise_base {
   public:
-     ~task_promise_base() {}
+    ~task_promise_base() {}
     auto initial_suspend() {
         return coro::suspend_never{};
     }
 
-    auto final_suspend() noexcept { 
+    auto final_suspend() noexcept {
         return coro::suspend_always{};
     }
 
@@ -75,14 +75,16 @@ constexpr get_promise_t get_promise = {};
 template<typename T>
 class task_promise final : public task_promise_base {
   public:
-      using task_return_type = task<T>::return_type;
+    using task_return_type = task<T>::return_type;
     task<T> get_return_object() noexcept {
         task<T> task(coro::coroutine_handle<task_promise>::from_promise(*this));
         ret_ = task.ret_value_ = std::make_shared<task_return_type>();
         return task;
     }
 
-    ~task_promise() { LOG_DEBUG("~task_promise"); }
+    ~task_promise() {
+        LOG_DEBUG("~task_promise");
+    }
 
     void return_value(T value) {
         LOG_DEBUG("return_value: {}", value);
@@ -113,7 +115,7 @@ struct task_awaiter {
         LOG_DEBUG("~task_awaiter");
     }
     task_awaiter(std::function<void(coro::coroutine_handle<task_promise<T>>)> suspend_callback,
-        std::function<std::optional<T>()> resume_callback) :
+                 std::function<std::optional<T>()> resume_callback) :
         suspend_callback_(suspend_callback),
         resume_callback_(resume_callback) {
 
@@ -131,7 +133,7 @@ struct task_awaiter {
         return resume_callback_();
     }
 
-private:
+  private:
     std::function<void(coro::coroutine_handle<task_promise<T>>)> suspend_callback_;
     std::function<std::optional<T>()> resume_callback_;
 };

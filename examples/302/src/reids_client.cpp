@@ -48,17 +48,16 @@ bool redis_client::connect(event_base* base, std::string_view host, uint16_t por
     redisAsyncSetConnectCallback(actx, [](const struct redisAsyncContext* actx, int status) {
         if (status == REDIS_OK) {
             LOG_INFO("redis connect success.", status);
-        }
-        else {
+        } else {
             LOG_ERROR("redis connect error, {}({})", actx->errstr, actx->err);
             redis_client::get().clean();
         }
-        });
+    });
     redisAsyncSetDisconnectCallback(actx, [](const struct redisAsyncContext* actx, int status) {
         LOG_INFO("redis disconnect status: {}", status);
         redis_client::get().reconnect();
 
-        });
+    });
     redis_ctx_ = actx;
     return true;
 }

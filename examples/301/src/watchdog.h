@@ -9,7 +9,7 @@
 struct bufferevent;
 
 class watchdog {
-public:
+  public:
     watchdog(event_base* base, uint16_t port) : base_(base), port_(port) {}
 
     bool start();
@@ -17,19 +17,19 @@ public:
     task<bool> coro_call_test_cmds(std::string_view msgs);
     task<int> coro_call_test();
 
-private:
+  private:
     // void accept();
     static void listener_cb(struct evconnlistener* listener,
-        evutil_socket_t fd,
-        struct sockaddr* remote_addr,
-        int socklen,
-        void* pdata);
+                            evutil_socket_t fd,
+                            struct sockaddr* remote_addr,
+                            int socklen,
+                            void* pdata);
 
     static void read_cb(struct bufferevent* bev, void* ctx);
     static void write_cb(struct bufferevent* bev, void* ctx);
     static void event_cb(struct bufferevent* bev, short what, void* ctx);
-    
-private:
+
+  private:
     event_base* base_ = nullptr;                    // libevent io context
     uint16_t port_ = 0;
     struct evconnlistener* listener_;

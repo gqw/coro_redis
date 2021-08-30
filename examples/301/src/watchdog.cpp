@@ -26,18 +26,18 @@ bool watchdog::start() {
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port_);
     listener_ = evconnlistener_new_bind(base_, listener_cb, this,
-        LEV_OPT_REUSEABLE | LEV_OPT_CLOSE_ON_FREE, -1,
-        (struct sockaddr*)&sin, sizeof(sin));
+                                        LEV_OPT_REUSEABLE | LEV_OPT_CLOSE_ON_FREE, -1,
+                                        (struct sockaddr*)&sin, sizeof(sin));
 
     ASSERT_RETURN(listener_ != nullptr, false, "create socket failed.");
     return true;
 }
 
 void watchdog::listener_cb(struct evconnlistener* listener,
-    evutil_socket_t fd,
-    struct sockaddr* remote_addr,
-    int socklen,
-    void* pdata) {
+                           evutil_socket_t fd,
+                           struct sockaddr* remote_addr,
+                           int socklen,
+                           void* pdata) {
     watchdog* _this = static_cast<watchdog*>(pdata);
     struct event_base* base = (struct event_base*)_this->base_;
     struct bufferevent* bev = nullptr;
@@ -62,8 +62,7 @@ void watchdog::write_cb(struct bufferevent* bev, void* ctx) {
 void watchdog::event_cb(struct bufferevent* bev, short what, void* ctx) {
     if (what & BEV_EVENT_EOF) {
         LOG_INFO("remote socket closed.");
-    }
-    else if (what & BEV_EVENT_ERROR) {
+    } else if (what & BEV_EVENT_ERROR) {
         LOG_INFO("some error, {}", what);
     }
 
@@ -93,7 +92,7 @@ task<int> watchdog::coro_call_test() {
     co_await redis_client::get().coro_set<int>("var3", var3);
     auto var3_2 = co_await redis_client::get().coro_get<int>("var3");
     LOG_DEBUG("r: {}, var1: {}, var2: {}, var3: {}, var3_2: {}",
-        r.value(), var1.value(), var2.value(), var3, var3_2.value());
+              r.value(), var1.value(), var2.value(), var3, var3_2.value());
     co_return 1;
 }
 

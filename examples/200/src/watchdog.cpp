@@ -24,18 +24,18 @@ bool watchdog::start() {
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port_);
     listener_ = evconnlistener_new_bind(base_, listener_cb, this,
-        LEV_OPT_REUSEABLE | LEV_OPT_CLOSE_ON_FREE, -1,
-        (struct sockaddr*)&sin, sizeof(sin));
+                                        LEV_OPT_REUSEABLE | LEV_OPT_CLOSE_ON_FREE, -1,
+                                        (struct sockaddr*)&sin, sizeof(sin));
 
     ASSERT_RETURN(listener_ != nullptr, false, "create socket failed.");
     return true;
 }
 
 void watchdog::listener_cb(struct evconnlistener* listener,
-    evutil_socket_t fd,
-    struct sockaddr* remote_addr,
-    int socklen,
-    void* pdata) {
+                           evutil_socket_t fd,
+                           struct sockaddr* remote_addr,
+                           int socklen,
+                           void* pdata) {
     watchdog* _this = static_cast<watchdog*>(pdata);
     struct event_base* base = (struct event_base*)_this->base_;
     struct bufferevent* bev = nullptr;
@@ -60,8 +60,7 @@ void watchdog::write_cb(struct bufferevent* bev, void* ctx) {
 void watchdog::event_cb(struct bufferevent* bev, short what, void* ctx) {
     if (what & BEV_EVENT_EOF) {
         LOG_INFO("remote socket closed.");
-    }
-    else if (what & BEV_EVENT_ERROR) {
+    } else if (what & BEV_EVENT_ERROR) {
         LOG_INFO("some error, {}", what);
     }
 
@@ -82,7 +81,7 @@ void watchdog::read_cb(struct bufferevent* bev, void* ctx) {
     }
     LOG_DEBUG("recv msg: {}:{}", msg.length(), std::string(msg.data(), len));
 
-    redis_client::get().async_command([](struct redisAsyncContext* actx, void* reply, void* pcb_data){
+    redis_client::get().async_command([](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
         ASSERT_RETURN(reply != nullptr, void(0), "redis commmand call error, {}({})", actx->errstr, actx->err);
         redisReply* r = (redisReply*)reply;
         LOG_INFO("echo return, type: {},  integer return: {}, content: {}", r->type, r->integer, std::string(r->str, r->len));

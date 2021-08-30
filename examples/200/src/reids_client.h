@@ -8,7 +8,7 @@ struct redisAsyncContext;
 struct event_base;
 typedef void (redisCallbackFn)(struct redisAsyncContext*, void*, void*);
 class redis_client final {
-public:
+  public:
 
     // 静态单例
     static redis_client& get();
@@ -18,15 +18,19 @@ public:
     // 发送异步命令
     int async_command(redisCallbackFn* callback, void* pcb_data, std::string_view cmd);
     int async_fmt_command(redisCallbackFn* callback, void* pcb_data, std::string_view fmt, ...);
-    void set_status(int status) { status_ = status; }
-    int status() { return status_; }
+    void set_status(int status) {
+        status_ = status;
+    }
+    int status() {
+        return status_;
+    }
 
-private:
+  private:
     redis_client() = default;
     redis_client(const redis_client&) = delete;
     redis_client operator =(const redis_client&) = delete;
 
-private:
+  private:
     event_base* base_ = nullptr;                    // libevent io context
     std::string host_;                              // redis address
     uint16_t port_ = 0;                             // redis port

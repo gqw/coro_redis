@@ -28,110 +28,103 @@
 namespace fs = std::filesystem;
 /// spdlog wrap class
 class logger final {
-public:
-	/// let logger like stream
-	struct log_stream : public std::ostringstream
-	{
-	public:
-		log_stream(const spdlog::source_loc& _loc, spdlog::level::level_enum _lvl, std::string_view _prefix)
-			: loc(_loc)
-			, lvl(_lvl)
-			, prefix(_prefix)
-		{
-		}
+  public:
+    /// let logger like stream
+    struct log_stream : public std::ostringstream {
+      public:
+        log_stream(const spdlog::source_loc& _loc, spdlog::level::level_enum _lvl, std::string_view _prefix)
+            : loc(_loc)
+            , lvl(_lvl)
+            , prefix(_prefix) {
+        }
 
-		~log_stream()
-		{
-			flush();
-		}
+        ~log_stream() {
+            flush();
+        }
 
-		void flush()
-		{
-			logger::get().log(loc, lvl, (prefix + str()).c_str());
-		}
+        void flush() {
+            logger::get().log(loc, lvl, (prefix + str()).c_str());
+        }
 
-	private:
-		spdlog::source_loc loc;
-		spdlog::level::level_enum lvl = spdlog::level::info;
-		std::string prefix;
-	};
+      private:
+        spdlog::source_loc loc;
+        spdlog::level::level_enum lvl = spdlog::level::info;
+        std::string prefix;
+    };
 
-public:
-	static logger& get() {
-		static logger logger;
-		return logger;
-	}
+  public:
+    static logger& get() {
+        static logger logger;
+        return logger;
+    }
 
-	bool init(std::string_view log_file_path) {
-		if (_is_inited) return true;
-		try
-		{
-			// check log path and try to create log directory
-			fs::path log_path(log_file_path);
-			fs::path log_dir = log_path.parent_path();
-			if (!fs::exists(log_path)) {
-				fs::create_directories(log_dir);
-			}
-			// initialize spdlog
-			constexpr std::size_t log_buffer_size = 32 * 1024; // 32kb
-			// constexpr std::size_t max_file_size = 50 * 1024 * 1024; // 50mb
-			spdlog::init_thread_pool(log_buffer_size, std::thread::hardware_concurrency());
-			spdlog::set_level(_log_level);
-			spdlog::flush_on(_log_level);
-			spdlog::set_pattern("%s(%#): [%L %D %T.%e %P %t %!] %v");
-			spdlog::set_default_logger(spdlog::daily_logger_mt("daily_logger", log_path.string(), false, 2));
-		}
-		catch (std::exception_ptr e)
-		{
-			assert(false);
-			return false;
-		}
-		_is_inited = true;
-		return true;
-	}
+    bool init(std::string_view log_file_path) {
+        if (_is_inited) return true;
+        try {
+            // check log path and try to create log directory
+            fs::path log_path(log_file_path);
+            fs::path log_dir = log_path.parent_path();
+            if (!fs::exists(log_path)) {
+                fs::create_directories(log_dir);
+            }
+            // initialize spdlog
+            constexpr std::size_t log_buffer_size = 32 * 1024; // 32kb
+            // constexpr std::size_t max_file_size = 50 * 1024 * 1024; // 50mb
+            spdlog::init_thread_pool(log_buffer_size, std::thread::hardware_concurrency());
+            spdlog::set_level(_log_level);
+            spdlog::flush_on(_log_level);
+            spdlog::set_pattern("%s(%#): [%L %D %T.%e %P %t %!] %v");
+            spdlog::set_default_logger(spdlog::daily_logger_mt("daily_logger", log_path.string(), false, 2));
+        } catch (std::exception_ptr e) {
+            assert(false);
+            return false;
+        }
+        _is_inited = true;
+        return true;
+    }
 
-	void shutdown() { spdlog::shutdown(); }
+    void shutdown() {
+        spdlog::shutdown();
+    }
 
-	template <typename... Args>
-	void log(const spdlog::source_loc& loc, spdlog::level::level_enum lvl, const char* fmt, const Args &... args)
-	{
-		spdlog::log(loc, lvl, fmt, args...);
-	}
+    template <typename... Args>
+    void log(const spdlog::source_loc& loc, spdlog::level::level_enum lvl, const char* fmt, const Args &... args) {
+        spdlog::log(loc, lvl, fmt, args...);
+    }
 
-	template <typename... Args>
-	void printf(const spdlog::source_loc& loc, spdlog::level::level_enum lvl, const char* fmt, const Args &... args)
-	{
-		spdlog::log(loc, lvl, fmt::sprintf(fmt, args...).c_str());
-	}
+    template <typename... Args>
+    void printf(const spdlog::source_loc& loc, spdlog::level::level_enum lvl, const char* fmt, const Args &... args) {
+        spdlog::log(loc, lvl, fmt::sprintf(fmt, args...).c_str());
+    }
 
-	spdlog::level::level_enum level() {
-		return _log_level;
-	}
+    spdlog::level::level_enum level() {
+        return _log_level;
+    }
 
-	void set_level(spdlog::level::level_enum lvl) {
-		_log_level = lvl;
-		spdlog::set_level(lvl);
-		spdlog::flush_on(lvl);
-	}
+    void set_level(spdlog::level::level_enum lvl) {
+        _log_level = lvl;
+        spdlog::set_level(lvl);
+        spdlog::flush_on(lvl);
+    }
 
-	static const char* get_shortname(std::string_view path) {
-		if (path.empty())
-			return path.data();
+    static const char* get_shortname(std::string_view path) {
+        if (path.empty())
+            return path.data();
 
-		size_t pos = path.find_last_of("/\\");
-		return path.data() + ((pos == path.npos) ? 0 : pos + 1);
-	}
+        size_t pos = path.find_last_of("/\\");
+        return path.data() + ((pos == path.npos) ? 0 : pos + 1);
+    }
 
-private:
-	logger() = default;
-	~logger() = default;
+  private:
+    logger() = default;
+    ~logger() = default;
 
-	logger(const logger&) = delete;
-	void operator=(const logger&) = delete;
+    logger(const logger&) = delete;
+    void operator=(const logger&) = delete;
 
-private:
-	std::atomic_bool _is_inited = false;
-	spdlog::level::level_enum _log_level = spdlog::level::info;
+  private:
+    std::atomic_bool _is_inited = false;
+    spdlog::level::level_enum _log_level = spdlog::level::info;
 };
 
 #undef LOG_TRACE
