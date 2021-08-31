@@ -18,15 +18,13 @@
 namespace coro_redis {
 
 template <typename CORO_RET>
-using awaiter_t = task_awaiter<CORO_RET, redisReply*>;
+using awaiter_t = task_awaiter<std::optional<CORO_RET>, redisReply*>;
 
 namespace impl {
 
 class coro_connection_impl {
 public:
 	coro_connection_impl(redisAsyncContext* actx) : redis_ctx_(actx) {}
-
-	std::shared_ptr<sync_connection> sync() { return std::make_shared<sync_connection>(&redis_ctx_->c); }
 
 	template<typename CORO_RET>
 	awaiter_t<CORO_RET> command(std::string_view cmd) const {

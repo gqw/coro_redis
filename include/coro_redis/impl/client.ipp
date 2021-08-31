@@ -71,14 +71,10 @@ class client_impl {
                 awaiter->set_coro_return(nullptr);
               });
         },
-        [](awaiter_t* awaiter,
-           const coro::coroutine_handle<>&) -> std::optional<std::shared_ptr<coro_connection>> {
-          ASSERT_RETURN(awaiter->coro_return().has_value(), std::nullopt,
-                        "redis connect failed.");
-          std::shared_ptr<coro_connection> conn =
-              std::make_shared<coro_connection>(
-                  (redisAsyncContext*)awaiter->coro_return().value());
-          return conn;
+        [](awaiter_t* awaiter, const coro::coroutine_handle<>&)
+            -> std::shared_ptr<coro_connection> {
+          ASSERT_RETURN(awaiter->coro_return().has_value(), nullptr, "redis connect failed.");
+          return std::make_shared<coro_connection>((redisAsyncContext*)awaiter->coro_return().value());
         });
   }
 
@@ -168,44 +164,42 @@ class client_impl {
           }
         },
         [](fetch_awaiter_t* awaiter, const coro::coroutine_handle<>&)
-            -> std::optional<std::shared_ptr<coro_connection>> {
+            -> std::shared_ptr<coro_connection> {
           client_impl* clt =
               std::any_cast<client_impl*>(awaiter->coro_return().value());
           return clt->fetch_from_free_pool();
         });
   }
 
-  std::shared_ptr<coro_connection> sync_fetch_conn() {
+  //std::shared_ptr<coro_connection> sync_fetch_conn() {
+  //  auto conn = fetch_from_free_pool();
+  //  if (conn) return conn;
 
-
-    auto conn = fetch_from_free_pool();
-    if (conn) return conn;
-
-    std::lock_guard<std::mutex> locker(pool_mutex_);
-    // no available connection, try to create one
-    if (!pool_ios_.empty()) {
-      auto* ioc = pool_ios_.back();
-      pool_ios_.pop_back();
-      timeval_t timeout = {timeout_, 0};  // 1.5 seconds
-      redisOptions opt{};
-      std::string sh(host_.data(), host_.size());
-      opt.endpoint.tcp.ip = sh.c_str();
-      opt.endpoint.tcp.port = port_;
-      opt.connect_timeout = (const timeval*)&timeout;
-      opt.command_timeout = (const timeval*)&timeout;
-      redisAsyncContext* actx = redisAsyncConnectWithOptions(&opt);
-      ASSERT_RETURN(actx != nullptr, nullptr, "connect redis failed, {}:{}",
-                    host_, port_);
-      ASSERT_RETURN(actx->err == 0, nullptr, "connect redis failed, {}:{}",
-                    actx->err, actx->errstr);
-      ASSERT_RETURN(ioc->attach(actx) == REDIS_OK, nullptr,
-                    "redis event attach failed.");
-      return add_new_conn((redisAsyncContext*)actx);
-    }
-    // if no available context, create failed,
-    // we cannot wait other connection to free, so return nullptr
-    return nullptr;
-  }
+  //  std::lock_guard<std::mutex> locker(pool_mutex_);
+  //  // no available connection, try to create one
+  //  if (!pool_ios_.empty()) {
+  //    auto* ioc = pool_ios_.back();
+  //    pool_ios_.pop_back();
+  //    timeval_t timeout = {timeout_, 0};  // 1.5 seconds
+  //    redisOptions opt{};
+  //    std::string sh(host_.data(), host_.size());
+  //    opt.endpoint.tcp.ip = sh.c_str();
+  //    opt.endpoint.tcp.port = port_;
+  //    opt.connect_timeout = (const timeval*)&timeout;
+  //    opt.command_timeout = (const timeval*)&timeout;
+  //    redisAsyncContext* actx = redisAsyncConnectWithOptions(&opt);
+  //    ASSERT_RETURN(actx != nullptr, nullptr, "connect redis failed, {}:{}",
+  //                  host_, port_);
+  //    ASSERT_RETURN(actx->err == 0, nullptr, "connect redis failed, {}:{}",
+  //                  actx->err, actx->errstr);
+  //    ASSERT_RETURN(ioc->attach(actx) == REDIS_OK, nullptr,
+  //                  "redis event attach failed.");
+  //    return add_new_conn((redisAsyncContext*)actx);
+  //  }
+  //  // if no available context, create failed,
+  //  // we cannot wait other connection to free, so return nullptr
+  //  return nullptr;
+  //}
 
   std::shared_ptr<coro_connection> fetch_from_free_pool() {
     std::lock_guard<std::mutex> locker(pool_mutex_);

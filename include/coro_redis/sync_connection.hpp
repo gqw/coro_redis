@@ -24,7 +24,7 @@ class sync_connection {
     ///
     /// @param ctx Redis synchronous context
     ///
-    sync_connection(redisContext* ctx) : impl_(ctx) {}
+    sync_connection(redisContext* ctx) : impl_(ctx) { }
 
     /// @brief Send redis command.
     /// @param cmd Redis command.

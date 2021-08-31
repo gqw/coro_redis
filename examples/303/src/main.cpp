@@ -5,13 +5,12 @@
 // See accompanying file LICENSE.txt or copy at
 // https://opensource.org/licenses/MIT
 //
-#include <hiredis/adapters/libevent.h>
-
-#include <cmdline.hpp>
-#include <coro_redis/client.hpp>
-
 #include <future>
 #include <logger.hpp>
+#include <cmdline.hpp>
+// #include <hiredis/adapters/libevent.h>
+#include <hiredis/adapters/libuv.h>
+#include <coro_redis/client.hpp>
 
 #include "test.h"
 
@@ -19,14 +18,8 @@ using namespace coro_redis;
 
 task<bool> coro_redis_test(const io_context& ioc, std::string_view host,
                            uint16_t port) {
-    auto conn_ret = co_await client::get().coro_connect(ioc, host, port, 50);
-    ASSERT_CO_RETURN(conn_ret.has_value(), false, "connect to redis failed.");
-
-    std::shared_ptr<coro_connection> conn = conn_ret.value();
-    std::shared_ptr<sync_connection> sync_conn = conn->sync();
-    auto echo_sync_ret = sync_conn->echo("hello");
-    ASSERT_CO_RETURN(echo_sync_ret.has_value(), false, "call echo failed.");
-    LOG_TRACE("echo sync ret {}", *echo_sync_ret);
+    auto conn = co_await client::get().coro_connect(ioc, host, port, 50);
+    ASSERT_CO_RETURN(conn != nullptr, false, "connect to redis failed.");
 
     auto scan_ret = co_await conn->scan(0);
     ASSERT_CO_RETURN(scan_ret.has_value(), false, "call scan failed.");
@@ -96,7 +89,8 @@ int main(int argc, char* argv[]) {
     // 设置日志级别
     logger::get().set_level(spdlog::level::level_enum(loglevel));
     // 创建libevent上下文环境
-    libevent_io_context ioc;
+    // libevent_io_context ioc;
+    libuv_io_context ioc;
     // 打开后台监视窗口
     // watchdog dog(base.get(), watchdog_port);
     // dog.start();

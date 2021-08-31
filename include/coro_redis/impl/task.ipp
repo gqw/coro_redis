@@ -112,7 +112,7 @@ public:
 template<typename CORO_RET, typename STORAGE_T = std::any>
 struct task_awaiter {
     typedef std::function<void(task_awaiter<CORO_RET, STORAGE_T>* awaiter, const coro::coroutine_handle<>&)> suspend_cb_type;
-    typedef std::function<std::optional<CORO_RET>(task_awaiter<CORO_RET, STORAGE_T>* awaiter, const coro::coroutine_handle<>&)> resume_cb_type;
+    typedef std::function<CORO_RET(task_awaiter<CORO_RET, STORAGE_T>* awaiter, const coro::coroutine_handle<>&)> resume_cb_type;
     task_awaiter() = default;
     task_awaiter(suspend_cb_type suspend_callback, resume_cb_type resume_callback) :
         suspend_callback_(suspend_callback),
@@ -126,12 +126,11 @@ struct task_awaiter {
 
     void await_suspend(coro::coroutine_handle<> coroutine) {
         h_coro_ = coroutine;
-        if (suspend_callback_) suspend_callback_(this, h_coro_);
+        suspend_callback_(this, h_coro_);
     }
 
-    std::optional<CORO_RET> await_resume() noexcept {
-        if (resume_callback_) return resume_callback_(this, h_coro_);
-        return std::nullopt;
+    CORO_RET await_resume() noexcept {
+      return resume_callback_(this, h_coro_);
     }
 
     void set_coro_return(STORAGE_T coro_ret) {

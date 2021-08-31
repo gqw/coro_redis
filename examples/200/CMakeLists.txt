@@ -22,5 +22,5 @@ add_executable(${PROJECT_NAME}  ${SOURCE_FILES} )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 target_link_libraries(${PROJECT_NAME} PRIVATE hiredis::hiredis libevent::core
-	libevent::extra spdlog::spdlog spdlog::spdlog_header_only)
+	libevent::extra spdlog::spdlog spdlog::spdlog_header_only )
 

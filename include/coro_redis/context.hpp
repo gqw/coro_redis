@@ -35,17 +35,22 @@ class libevent_io_context : public io_context {
 #ifdef __HIREDIS_LIBUV_H__
 class libuv_io_context : public io_context {
   public:
-    libuv_io_context() : base_(malloc(sizeof(uv_loop_t))) {}
+  libuv_io_context() : loop_((uv_loop_t*)malloc(sizeof(uv_loop_t))) {
+     uv_loop_init(loop_);
+  }
     ~libuv_io_context() {
-        if (base_) uv_loop_close(base_);
+        if (loop_) uv_loop_close(loop_);
     }
 
     virtual int attach(redisAsyncContext* actx) const override {
-        return redisLibuvAttach(actx, base_);
+        return redisLibuvAttach(actx, loop_);
     }
 
+    virtual void loop() const override { uv_run(loop_, UV_RUN_DEFAULT); }
+
+    virtual void exit() const override { uv_stop(loop_); }
   private:
-    uv_loop_t* base_ = nullptr;
+    uv_loop_t* loop_ = nullptr;
 };
 #endif
 }

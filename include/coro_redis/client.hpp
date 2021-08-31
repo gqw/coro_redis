@@ -106,9 +106,9 @@ class client final {
     ///		max. If connection pool is full and all connection are using
     ///		this function will return nullptr.
     ///
-    std::shared_ptr<coro_connection> sync_fetch_conn() {
-        return impl_.sync_fetch_conn();
-    }
+    //std::shared_ptr<coro_connection> sync_fetch_conn() {
+    //    return impl_.sync_fetch_conn();
+    //}
 
   private:
     client() = default;

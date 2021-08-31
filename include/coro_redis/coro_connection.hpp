@@ -28,14 +28,6 @@ class coro_connection {
     ///
     coro_connection(redisAsyncContext* actx) : impl_(actx) {}
 
-    ///
-    /// @brief construction
-    ///
-    /// @return Get synchronous connection from current connection
-    ///
-    std::shared_ptr<sync_connection> sync() {
-        return impl_.sync();
-    }
 
     /// @brief Send redis command.
     /// @param cmd Redis command.
