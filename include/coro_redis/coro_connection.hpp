@@ -42,7 +42,7 @@ class coro_connection {
     /// @return Redis return.
     template <typename CORO_RET = std::string>
     awaiter_t<CORO_RET> command(std::string_view cmd) const {
-        return impl_.command(cmd);
+        return impl_.command<CORO_RET>(cmd);
     }
 
     /// @brief Send redis command.
@@ -53,7 +53,7 @@ class coro_connection {
     awaiter_t<CORO_RET> command(
         std::string_view cmd,
         std::function<std::optional<CORO_RET>(redisReply*)>&& reply_op) const {
-        return impl_.command(cmd, reply_op);
+        return impl_.command<CORO_RET>(cmd, reply_op);
     }
 
     /// @brief Send password to Redis.
@@ -1354,7 +1354,7 @@ class coro_connection {
         cmd.append(" ").append(field);
         cmd.append(" ").append(value);
         (cmd.append(" ").append(args), ...);
-        return impl_.command<std::vector<std::string>>(std::move(cmd));
+        return impl_.command<std::string>(std::move(cmd));
     }
 
     /// @brief Scan fields of the given hash matching the given pattern.
@@ -1420,7 +1420,7 @@ class coro_connection {
         cmd.append(" ").append(field);
         cmd.append(" ").append(val);
         (cmd.append(" ").append(args), ...);
-        return impl_.command<std::vector<uint64_t>>(std::move(cmd));
+        return impl_.command<uint64_t>(std::move(cmd));
     }
 
     /// @brief Set multiple fields of the given hash.
@@ -1519,7 +1519,7 @@ class coro_connection {
         std::string cmd("sdiff");
         cmd.append(" ").append(key);
         (cmd.append(" ").append(keys), ...);
-        return impl_.command<uint64_t>(std::move(cmd));
+        return impl_.command<std::vector<std::string>>(std::move(cmd));
     }
 
     /// @brief Copy set stored at `key` to `destination`.
@@ -1551,7 +1551,7 @@ class coro_connection {
         std::string cmd("sinter");
         cmd.append(" ").append(key);
         (cmd.append(" ").append(keys), ...);
-        return impl_.command<uint64_t>(std::move(cmd));
+        return impl_.command<std::vector<std::string>>(std::move(cmd));
     }
 
     /// @brief Copy set stored at `key` to `destination`.
@@ -2308,7 +2308,7 @@ class coro_connection {
     inline awaiter_t<std::string> zrevrangebyscore(std::string_view key,
             std::string_view min,
             std::string_view max) {
-        return impl_.command<uint64_t>(
+        return impl_.command<std::string>(
                    fmt::format("zrevrangebyscore {} {} {}", key, min, max));
     }
 

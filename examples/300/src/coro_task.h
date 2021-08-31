@@ -29,7 +29,7 @@ class task {
   public:
     using promise_type = task_promise<T>;
     using return_type = void_to_nothing<T>::type;
-    friend class promise_type;
+    friend class task_promise<T>;
   public:
     task(coro::coroutine_handle<promise_type> h) {
         h_coro_ = h;

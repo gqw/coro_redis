@@ -35,7 +35,7 @@ public:
 										const coro::coroutine_handle<>& h) {
 			char* pcmd = nullptr;
 			auto cmd_len = redisFormatCommand(&pcmd, c.c_str());
-			auto ret = redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
+			redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
 				awaiter_t<CORO_RET>* awaiter = reinterpret_cast<awaiter_t<CORO_RET>*>(pcb_data);
 				if (reply) {
 					awaiter->set_coro_return((redisReply*)reply);
@@ -56,7 +56,7 @@ public:
 				const coro::coroutine_handle<>& h) {
 			char* pcmd = nullptr;
 			auto cmd_len = redisFormatCommand(&pcmd, c.c_str());
-			auto ret = redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
+			redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
 				awaiter_t<CORO_RET>* awaiter = reinterpret_cast<awaiter_t<CORO_RET>*>(pcb_data);
 				if (reply) {
 					awaiter->set_coro_return((redisReply*)reply);
@@ -144,7 +144,7 @@ public:
 			ret.first = std::stoll(std::string(elem_0->str, elem_0->len));
 			auto elem_1 = reply->element[1];
 			ASSERT_RETURN(elem_1->type == REDIS_REPLY_ARRAY, ret, "scan element[1] type not match, {}", elem_1->type);
-			for (int i = 0; i < elem_1->elements; ++i)
+			for (size_t i = 0; i < elem_1->elements; ++i)
 			{
 				if (elem_1->element[i]->type != REDIS_REPLY_STRING) {
 					ret.second.push_back("");
@@ -169,6 +169,7 @@ public:
 			case RedisTTLType::PX: cmd.append(" PX "); break;
 			case RedisTTLType::EXAT: cmd.append(" EXAT "); break;
 			case RedisTTLType::PXAT: cmd.append(" PXAT "); break;
+			case RedisTTLType::KEEPTTL: break;
 			}
 			cmd.append(std::to_string(ttl));
 		}
@@ -178,6 +179,7 @@ public:
 		switch (type) {
 		case UpdateType::EXIST: cmd.append(" XX "); break;
 		case UpdateType::NOT_EXIST: cmd.append(" NX "); break;
+		default: break;
 		}
 		return command<std::string>(std::move(cmd));
 	}
@@ -207,6 +209,7 @@ public:
 		case UpdateType::GREATE_THAN: cmd.append(" GT "); break;
 		case UpdateType::CHANGED: cmd.append(" CH "); break;
 		case UpdateType::INCR: cmd.append(" INCR "); break;
+		case UpdateType::ALWAYS: break;
 		}
 		cmd.append(" ").append(std::to_string(score));
 		cmd.append(" ").append(member);
@@ -226,6 +229,7 @@ public:
 		case UpdateType::GREATE_THAN: cmd.append(" GT "); break;
 		case UpdateType::CHANGED: cmd.append(" CH "); break;
 		case UpdateType::INCR: cmd.append(" INCR "); break;
+		default: break;
 		}
 		for (const auto& kv : kvs)
 		{
@@ -235,7 +239,7 @@ public:
 		return command<uint64_t>(std::move(cmd));
 	}
 
-	awaiter_t<uint64_t> zunionstore(std::string_view destination, 
+	awaiter_t<uint64_t> zunionstore(std::string_view destination,
 		std::initializer_list<std::string_view> keys, std::string_view aggregate) {
 		if (keys.size() == 0) return {};
 

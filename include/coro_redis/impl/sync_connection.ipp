@@ -36,7 +36,7 @@ class sync_connection_impl {
                     "redis response type not match, {}, {}", reply->type,
                     std::string(reply->str, reply->len));
       std::vector<std::string> resp;
-      for (int i = 0; i < reply->elements; ++i) {
+      for (size_t i = 0; i < reply->elements; ++i) {
         if (reply->element[i]->type != REDIS_REPLY_STRING) {
           resp.push_back("");
         } else {
@@ -155,7 +155,7 @@ class sync_connection_impl {
           auto elem_1 = reply->element[1];
           ASSERT_RETURN(elem_1->type == REDIS_REPLY_ARRAY, ret,
                         "scan element[1] type not match, {}", elem_1->type);
-          for (int i = 0; i < elem_1->elements; ++i) {
+          for (size_t i = 0; i < elem_1->elements; ++i) {
             if (elem_1->element[i]->type != REDIS_REPLY_STRING) {
               ret.second.push_back("");
             } else {
@@ -218,24 +218,13 @@ class sync_connection_impl {
     std::string cmd("zadd");
     cmd.append(" ").append(key);
     switch (type) {
-      case UpdateType::EXIST:
-        cmd.append(" XX ");
-        break;
-      case UpdateType::NOT_EXIST:
-        cmd.append(" NX ");
-        break;
-      case UpdateType::LESS_THAN:
-        cmd.append(" LT ");
-        break;
-      case UpdateType::GREATE_THAN:
-        cmd.append(" GT ");
-        break;
-      case UpdateType::CHANGED:
-        cmd.append(" CH ");
-        break;
-      case UpdateType::INCR:
-        cmd.append(" INCR ");
-        break;
+      case UpdateType::EXIST: cmd.append(" XX "); break;
+      case UpdateType::NOT_EXIST: cmd.append(" NX "); break;
+      case UpdateType::LESS_THAN: cmd.append(" LT "); break;
+      case UpdateType::GREATE_THAN: cmd.append(" GT "); break;
+      case UpdateType::CHANGED: cmd.append(" CH "); break;
+      case UpdateType::INCR: cmd.append(" INCR "); break;
+      default: break;
     }
     cmd.append(" ").append(std::to_string(score));
     cmd.append(" ").append(member);
@@ -248,24 +237,13 @@ class sync_connection_impl {
     std::string cmd("zadd");
     cmd.append(" ").append(key);
     switch (type) {
-      case UpdateType::EXIST:
-        cmd.append(" XX ");
-        break;
-      case UpdateType::NOT_EXIST:
-        cmd.append(" NX ");
-        break;
-      case UpdateType::LESS_THAN:
-        cmd.append(" LT ");
-        break;
-      case UpdateType::GREATE_THAN:
-        cmd.append(" GT ");
-        break;
-      case UpdateType::CHANGED:
-        cmd.append(" CH ");
-        break;
-      case UpdateType::INCR:
-        cmd.append(" INCR ");
-        break;
+      case UpdateType::EXIST: cmd.append(" XX "); break;
+      case UpdateType::NOT_EXIST: cmd.append(" NX "); break;
+      case UpdateType::LESS_THAN:  cmd.append(" LT "); break;
+      case UpdateType::GREATE_THAN: cmd.append(" GT "); break;
+      case UpdateType::CHANGED: cmd.append(" CH ");  break;
+      case UpdateType::INCR: cmd.append(" INCR "); break;
+      default: break;
     }
     for (const auto& kv : kvs) {
       cmd.append(" ").append(std::to_string(kv.second));

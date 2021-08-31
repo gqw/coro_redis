@@ -35,7 +35,7 @@ class redis_client final {
         return task_awaiter<TASK_RET, CORO_RET>([this, c = std::string(cmd)](const coro::coroutine_handle<task_promise<TASK_RET>>& h) {
             char* pcmd = nullptr;
             auto cmd_len = redisFormatCommand(&pcmd, c.c_str());
-            auto ret = redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
+            redisAsyncFormattedCommand(redis_ctx_, [](struct redisAsyncContext* actx, void* reply, void* pcb_data) {
                 auto h = coro::coroutine_handle<task_promise<TASK_RET>>::from_address(pcb_data);
                 if (reply) {
                     h.promise().set_coro_return((redisReply*)reply);
@@ -49,9 +49,7 @@ class redis_client final {
             if (ret->type == REDIS_REPLY_NIL) {
                 return std::nullopt;
             }
-            if constexpr (std::is_same_v<std::remove_pointer<CORO_RET>::type, redisReply>) {
-                return ret;
-            } else if constexpr (std::is_same_v<CORO_RET, std::string>) {
+            if constexpr (std::is_same_v<CORO_RET, std::string>) {
                 ASSERT_RETURN(ret->type == REDIS_REPLY_STRING || ret->type == REDIS_REPLY_STATUS, std::nullopt,
                               "redis response type not match, {}, {}", ret->type, std::string(ret->str, ret->len));
                 return std::string(ret->str, ret->len);

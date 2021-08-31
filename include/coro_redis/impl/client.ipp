@@ -6,6 +6,7 @@
 // https://opensource.org/licenses/MIT
 //
 #pragma once
+#include <list>
 #include <mutex>
 #include <hiredis/async.h>
 
@@ -102,7 +103,7 @@ class client_impl {
     return std::make_shared<sync_connection>(ctx);
   }
 
-	void pool_init(std::vector<io_context*> pool_ios, 
+	void pool_init(std::vector<io_context*> pool_ios,
                  std::string_view host_sv,
                  uint16_t port,
                  long timeout_seconds = 5) {
@@ -117,13 +118,13 @@ class client_impl {
     return fetch_awaiter_t(
         [this](fetch_awaiter_t* awaiter, const coro::coroutine_handle<>&) {
           std::lock_guard<std::mutex> locker(pool_mutex_);
-          if (!free_pool_.empty()) {
+          if (!this->free_pool_.empty()) {
             // find available connection
             awaiter->resume();
             return;
           }
-          // no available connection, try to create one 
-          if (!pool_ios_.empty())
+          // no available connection, try to create one
+          if (!this->pool_ios_.empty())
           {
             auto* ioc = pool_ios_.back();
             pool_ios_.pop_back();
@@ -161,7 +162,7 @@ class client_impl {
             return;
           }
           // if no available context, create failed, wait other connection to free
-          { 
+          {
             fetch_awaiters_.push_back(awaiter);
             return;
           }
@@ -175,7 +176,7 @@ class client_impl {
   }
 
   std::shared_ptr<coro_connection> sync_fetch_conn() {
-    
+
 
     auto conn = fetch_from_free_pool();
     if (conn) return conn;

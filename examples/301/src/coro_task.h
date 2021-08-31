@@ -34,8 +34,7 @@ class task {
   public:
     using promise_type = task_promise<TASK_RET>;
     using value_type = TASK_RET;
-    //using cptr = const std::shared_ptr<T>&;
-    friend class promise_type;
+    friend class task_promise<TASK_RET>;
 
   public:
     task(coro::coroutine_handle<promise_type> h) {

@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
 
     auto host = cmd.get<std::string>("host");
     auto port = cmd.get<uint16_t>("port");
-    auto watchdog_port = cmd.get<uint16_t>("watchdog");
+    // auto watchdog_port = cmd.get<uint16_t>("watchdog");
     auto loglevel = cmd.get<uint16_t>("loglevel");
 
     // 设置日志级别

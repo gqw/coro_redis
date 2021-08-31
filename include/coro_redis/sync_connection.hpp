@@ -31,13 +31,13 @@ class sync_connection {
     /// @return Redis return.
     template <typename RET = std::string>
     std::optional<RET> command(std::string_view cmd) const {
-        return impl_.command(cmd);
+        return impl_.command<RET>(cmd);
     }
 
     template <typename RET = std::string>
     std::optional<RET> command(std::string_view cmd,
                                std::function<void(redisReply*)> op) const {
-        return impl_.command(cmd, op);
+        return impl_.command<RET>(cmd, op);
     }
 
 
@@ -1327,7 +1327,7 @@ class sync_connection {
     /// @param last Off-the-end iterator to the range.
     /// @see https://redis.io/commands/hmset
     template <typename... Args>
-    inline std::optional<std::string> hmset(
+    inline std::optional<std::vector<std::string>> hmset(
         std::string_view key, std::string_view field, std::string_view value,
         Args && ... args) {
         std::string cmd("hmset ");
@@ -1401,7 +1401,7 @@ class sync_connection {
         cmd.append(" ").append(field);
         cmd.append(" ").append(val);
         (cmd.append(" ").append(args), ...);
-        return impl_.command<std::vector<uint64_t>>(std::move(cmd));
+        return impl_.command<uint64_t>(std::move(cmd));
     }
 
     /// @brief Set multiple fields of the given hash.
@@ -1499,7 +1499,7 @@ class sync_connection {
         std::string cmd("sdiff");
         cmd.append(" ").append(key);
         (cmd.append(" ").append(keys), ...);
-        return impl_.command<uint64_t>(std::move(cmd));
+        return impl_.command<std::vector<std::string>>(std::move(cmd));
     }
 
     /// @brief Copy set stored at `key` to `destination`.
@@ -1531,7 +1531,7 @@ class sync_connection {
         std::string cmd("sinter");
         cmd.append(" ").append(key);
         (cmd.append(" ").append(keys), ...);
-        return impl_.command<uint64_t>(std::move(cmd));
+        return impl_.command<std::vector<std::string>>(std::move(cmd));
     }
 
     /// @brief Copy set stored at `key` to `destination`.
@@ -2280,7 +2280,7 @@ class sync_connection {
     template <typename Interval, typename Output>
     inline std::optional<std::string> zrevrangebyscore(
         std::string_view key, std::string_view min, std::string_view max) {
-        return impl_.command<uint64_t>(
+        return impl_.command<std::string>(
                    fmt::format("zrevrangebyscore {} {} {}", key, min, max));
     }
 
