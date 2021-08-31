@@ -17,7 +17,7 @@ menu:
 
 代码还是像[mrpc](https://github.com/gqw/mrpc.git)一样追求少而精，希望大家能够学会怎样使用c++的协程，而不是直接把库拿过去用。
 
-协程是从`C++20`开始被加进标准库的，但是仅支持基本的协程功能，用起来还不是很方便，估计需要等到`C++23`才能完善（请参考：[C++23的目标](https://zhuanlan.zhihu.com/p/107360459)）。VisualStudio 2022 PREVIEW（ToolSet v143）已经正式支持协程，相关头文件也已经从`experimental`目录移到正式目录，并且不需再添加 `/await` 编译选项（v143之前使用协程请参考[`/await`](https://docs.microsoft.com/en-us/cpp/build/reference/await-enable-coroutine-support?view=msvc-160)选项说明）。GCC从10.0版本开始支持协程，11.0版本不再是`experimental`，但还是需要 `-fcoroutines` 编译选项（请参考：[C++ Standards Support in GCC](https://gcc.gnu.org/projects/cxx-status.html)）。
+协程是从`C++20`开始被加进标准库的，但是仅支持基本的协程功能，用起来还不是很方便，估计需要等到`C++23`才能完善（请参考：[C++23的目标](https://zhuanlan.zhihu.com/p/107360459)）。VisualStudio 2019(v142)/2022 PREVIEW（v143）已经正式支持协程，相关头文件也已经从`experimental`目录移到正式目录，并且不需再添加 `/await` 编译选项（v143之前使用协程请参考[`/await`](https://docs.microsoft.com/en-us/cpp/build/reference/await-enable-coroutine-support?view=msvc-160)选项说明）。GCC从10.0版本开始支持协程，11.0版本不再是`experimental`，但还是需要 `-fcoroutines` 编译选项（请参考：[C++ Standards Support in GCC](https://gcc.gnu.org/projects/cxx-status.html)）。
 
 以下是开发使用的环境：
 
@@ -25,7 +25,7 @@ menu:
 |  windows   					| linux  					|
 |  ----  						| ----  					|
 | Windows 10 版本 2004  		| Ubuntu 20.04.2 LTS(wsl2) 	|
-| Visual Studio 2022(v143)  	| GCC 11.1.0 				|
+| Visual Studio 2019/2022(v143)  	| GCC 11.1.0 				|
 | cmake version 3.21.1		  	| cmake version 3.21.1 		|
 |Vcpkg  version 2021-07-26-9425cf5f512f242c0bcbabac31f08832825aee81| Same as Windows |
 
